@@ -885,6 +885,12 @@ describe('init', () => {
 });
 
 describe('CLI usage', () => {
+  it('lists every validated gasdev key in help', () => {
+    const result = run(REPO_ROOT, ['--help']);
+    expect(result.stdout).toContain('"bundle", "release" and "ci"');
+    expect(result.stdout).toContain('(gas preset only)');
+  });
+
   it('exits 2 without a command', () => {
     const result = run(REPO_ROOT, []);
     expect(result.status).toBe(2);
