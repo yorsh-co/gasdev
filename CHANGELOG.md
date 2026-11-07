@@ -31,6 +31,7 @@
 - README: table of contents, back-to-top links, and About / Getting started / Tool reference / Contributing grouping, plus a Quick start
 - `gasdev deploy` prints the clasp it runs (`Using clasp: <path>`); see ADR 0022
 - Dev-only: coverage includes spawned `bin/*` and helper processes (`autoAttachSubprocess`), with thresholds ratcheted to 78/69/73/78
+- README is reorganised by task, with key terms, deduplicated config rules, unified exit code tables, and the 3.0 migration guide moved to `docs/migrating-to-3.0.md`
 
 ### Fixed
 
