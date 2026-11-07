@@ -54,8 +54,7 @@
 - One Prettier config, five TypeScript presets and one ESLint flat-config factory, so a tooling change is made once and rolled out by bumping a version
 - Uses each tool's own extension mechanism (shared Prettier config, tsconfig `extends`, exported ESLint factory) instead of copying files
 - ESLint `gas` preset for Apps Script TypeScript, with a `web` option for browser sources and a `node` preset for plain JavaScript tooling
-- `gasdev check` reports drift of the files that cannot be extended: `.gitignore`, `.prettierignore`, `.github/dependabot.yml` and the standard `package.json` scripts
-- The check is read-only unless you pass `--fix`, which only appends missing template lines to `.gitignore` and `.prettierignore`
+- `gasdev check` reports drift of the files that cannot be extended: `.gitignore`, `.prettierignore`, `.github/dependabot.yml` and the standard `package.json` scripts; it is read-only unless you pass `--fix`, which only appends missing template lines to `.gitignore` and `.prettierignore`
 - `gasdev init` scaffolds a new project: ignore files, `.github/dependabot.yml` and the missing required scripts, without overwriting anything
 - `gasdev/test` loads Apps Script sources, which are global-scope scripts without exports, into a fresh `node:vm` context for Vitest suites
 - `gasdev gas-test` builds a library's tests into one script that runs in real Apps Script, from the editor or through clasp
