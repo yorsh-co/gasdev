@@ -19,7 +19,7 @@
   - [TypeScript](#typescript)
   - [ESLint](#eslint)
 - [Config check](#config-check)
-  - [Presets](#presets)
+  - [The gasdev key](#the-gasdev-key)
   - [What is checked](#what-is-checked)
   - [Dependabot](#dependabot)
 - [Testing](#testing)
@@ -51,19 +51,19 @@
 
 ### Features
 
-- One Prettier config, five TypeScript presets and one ESLint flat-config factory, so a tooling change is made once and rolled out by bumping a version
-- Uses each tool's own extension mechanism (shared Prettier config, tsconfig `extends`, exported ESLint factory) instead of copying files
-- ESLint `gas` preset for Apps Script TypeScript, with a `web` option for browser sources and a `node` preset for plain JavaScript tooling
-- `gasdev check` reports drift of the files that cannot be extended: `.gitignore`, `.prettierignore`, `.github/dependabot.yml` and the standard `package.json` scripts; it is read-only unless you pass `--fix`, which only appends missing template lines to `.gitignore` and `.prettierignore`
-- `gasdev init` scaffolds a new project: ignore files, `.github/dependabot.yml` and the missing required scripts, without overwriting anything
-- `gasdev/test` loads Apps Script sources, which are global-scope scripts without exports, into a fresh `node:vm` context for Vitest suites
-- `gasdev gas-test` builds a library's tests into one script that runs in real Apps Script, from the editor or through clasp
-- `gasdev html` inlines a page edited as `.html`, `.css` and TypeScript into one generated `.ts` string constant, so an HtmlService UI ships as a single Apps Script source file
-- `gasdev peers sync` writes the peer libraries' type declarations into `src/internal/` from their tagged releases, so they never drift from hand copies
-- `gasdev bundle` bundles gas-\* libraries from their `dist/vX.Y.Z` tags into one global script file, in load order, for an Apps Script project that uses several libraries
-- `gasdev release` publishes a library's build to one or more dist branches with `<branch>/vX.Y.Z` tags in a single atomic push, after preflight checks, with a `--dry-run` preview
-- `gasdev github` reports drift of the repository's GitHub rulesets from the shipped templates and, with `--fix`, creates or updates them
-- `gasdev setup` and `gasdev deploy` take an Apps Script web app from a guided first-time setup to clasp-based CI deployment, with a reusable GitHub Actions workflow
+- One shared [Prettier config](#prettier), five [TypeScript presets](#typescript) and one [ESLint factory](#eslint), rolled out by a version bump
+- Uses each tool's own extension mechanism instead of copied files, see [Shared configs](#shared-configs)
+- [ESLint](#eslint) `gas` preset for Apps Script TypeScript, with a `web` option and a `node` preset for plain JavaScript
+- [`gasdev check`](#config-check) reports drift in ignore files, Dependabot config and standard scripts
+- [`gasdev init`](#config-check) scaffolds a new project without overwriting anything
+- [`gasdev/test`](#test-loader) loads Apps Script sources into a fresh `node:vm` context for Vitest
+- [`gasdev gas-test`](#apps-script-tests) runs a library's tests in real Apps Script
+- [`gasdev html`](#html-build) inlines an HTML page into one generated `.ts` string constant
+- [`gasdev peers sync`](#peer-types) writes peer libraries' type declarations from their tagged releases
+- [`gasdev bundle`](#bundle) bundles gas-\* libraries from their `dist/vX.Y.Z` tags into one global script
+- [`gasdev release`](#release) publishes a library build to dist branches with tags in one atomic push
+- [`gasdev github`](#github-rulesets) reports GitHub ruleset drift and, with `--fix`, repairs it
+- [`gasdev setup` and `gasdev deploy`](#deploy-a-web-app) take a web app from first setup to clasp-based CI deployment
 - Plain ESM JavaScript, no build step
 
 <a id="gasdev-tools"></a>
@@ -327,9 +327,13 @@ It reads the project in the current directory and writes nothing unless `--fix` 
 | `-h`, `--help` | Show usage                                                                                        |
 | `--version`    | Show the version                                                                                  |
 
-Exit codes: `0` when the project matches, `1` on drift or an unusable `package.json`, `2` on invalid usage (a missing or unknown command, an unknown option).
+| Code | Meaning                                                         |
+| ---- | --------------------------------------------------------------- |
+| `0`  | The project matches                                             |
+| `1`  | Drift, or an unusable `package.json`                            |
+| `2`  | Invalid usage (a missing or unknown command, an unknown option) |
 
-### Presets
+### The gasdev key
 
 The preset is read from `package.json` and defaults to `gas`. Set it to `node` for plain JavaScript tooling:
 
@@ -341,7 +345,7 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
 }
 ```
 
-`loadOrder`, `peers`, `gasTest` and `html` are also read from `gasdev`, for the `gas` preset only. `bundle`, `release` and `ci` are accepted with either preset and are only checked to be objects; see [Bundle](#bundle), [Release configuration](#release-configuration) and the [setup wizard](#setup-wizard). Any other key or preset value is an error.
+`loadOrder`, `peers`, `gasTest` and `html` are also read from `gasdev`, for the `gas` preset only. `bundle`, `release` and `ci` are accepted with either preset; `gasdev check` only checks that they are objects, and their own tools validate them as described below. Any other key or preset value is an error.
 
 ```json
 {
@@ -367,7 +371,17 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
   - A non-empty array of objects with the keys `entry`, `out` and `name`; any other key is an error naming its path.
   - `out` and `name` are unique. Missing entry files, stale or missing generated files, and an `out` absent from `loadOrder` are reported as drift.
   - It requires `loadOrder`.
-- Any of these keys with the `node` preset is an error.
+- `bundle` configures [Bundle](#bundle).
+  - An object with the keys `libraries`, `outFile` and `typesFile`; `libraries` is required.
+  - Library names match `/^[a-z0-9][a-z0-9._-]*$/`. A library is a semver range, or `{ version, repository? }` where `version` is a valid semver range and `repository` is a non-empty Git URL or path.
+  - `outFile` and `typesFile` are relative to the project root, with no `..`, ending in `.js` and `.d.ts` respectively.
+  - Unknown keys are rejected with their path, for example `gasdev.bundle.libraries.gas-lock.repositry is not a known option.`
+- `release` configures [Release configuration](#release-configuration).
+  - An object with the keys `remote`, `targets` and `githubRelease`; `targets` is a non-empty list of targets with unique branches.
+  - Unknown keys in `gasdev.release`, in a target or in an `include` entry are rejected, naming the key path (for example `gasdev.release.targets[1].pakageJson is not a known option`).
+- `ci` configures the [setup wizard](#configuration-3).
+  - An object with the keys `title` and `steps`; any other key is rejected.
+- `loadOrder`, `peers`, `gasTest` and `html` with the `node` preset are an error.
 
 ### What is checked
 
@@ -554,9 +568,7 @@ The runtime's global declarations (`test`, `info`, `assert`, `runGasTests`, `Gas
 }
 ```
 
-- `scopes` is required: a non-empty array of unique strings, each starting with `https://www.googleapis.com/auth/`. They become the project's `oauthScopes`.
-- `scriptId` is optional; the `GAS_TEST_SCRIPT_ID` environment variable overrides it.
-- Unknown keys are rejected, naming their path.
+The `scopes` become the project's `oauthScopes`. The `GAS_TEST_SCRIPT_ID` environment variable overrides `scriptId`. The validation rules are in [The gasdev key](#the-gasdev-key).
 
 #### Writing tests
 
@@ -611,7 +623,7 @@ With `gasTest` configured, `gasdev check` requires these scripts with exactly th
 #### One-off setup
 
 1. Create a dedicated Apps Script project and link it to a standard Google Cloud project (project settings), which `clasp run` requires.
-2. Install clasp: `npm install -D @google/clasp`. `gas-test run` runs the clasp from the project's `node_modules`, not from `PATH`.
+2. Install clasp (see [Requirements](#requirements)). `gas-test run` runs the clasp from the project's `node_modules`, not from `PATH`.
 3. Authorize the scopes: `npx clasp login --extra-scopes <comma-separated gasTest.scopes>`.
 4. Set `GAS_TEST_SCRIPT_ID` (or `gasTest.scriptId`) and, optionally, `GAS_TEST_SPREADSHEET_ID`.
 
@@ -657,7 +669,7 @@ A library that ships an HtmlService UI edits it as `.html`, `.css` and TypeScrip
 | `out`   | Relative POSIX path under `src/` ending in `.ts` but not `.d.ts`. Its path relative to `src/` must be in `loadOrder`, otherwise it is drift |
 | `name`  | A valid JavaScript identifier for the constant                                                                                              |
 
-The array is non-empty, `out` and `name` are unique across entries, and unknown keys are errors naming their path.
+The validation rules are in [The gasdev key](#the-gasdev-key).
 
 #### Rules
 
@@ -743,9 +755,15 @@ Configure the libraries in the project's `package.json`, then run `gasdev bundle
 | `outFile`   | string | `src/gas-libraries.js` | Bundle path, relative to the project root; no `..`; must end in `.js`          |
 | `typesFile` | string | none                   | Declarations path, relative to the project root; no `..`; must end in `.d.ts`  |
 
-Library names match `/^[a-z0-9][a-z0-9._-]*$/`. `version` must be a valid semver range. `repository` is a non-empty Git URL or path and defaults to `https://github.com/yorsh-co/<name>.git`. Unknown keys are rejected with their path, e.g. `gasdev.bundle.libraries.gas-lock.repositry is not a known option.`
+`repository` defaults to `https://github.com/yorsh-co/<name>.git`. The validation rules are in [The gasdev key](#the-gasdev-key).
 
-`gasdev bundle` takes only `-h`/`--help` and `--version`. It prints one line per bundled library (name, version, short SHA, docs link), the written paths and a reminder about load order. Exit code `0` means the bundle was written, `1` a failure (`gasdev: <message>`) and `2` invalid usage.
+`gasdev bundle` takes only `-h`/`--help` and `--version`. It prints one line per bundled library (name, version, short SHA, docs link), the written paths and a reminder about load order.
+
+| Code | Meaning                       |
+| ---- | ----------------------------- |
+| `0`  | The bundle was written        |
+| `1`  | Failure (`gasdev: <message>`) |
+| `2`  | Invalid usage                 |
 
 > [!IMPORTANT]
 > Apps Script loads files in `filePushOrder` or, by default, alphabetically. `outFile` must load before any project code that uses the library globals at top level.
@@ -876,7 +894,12 @@ gasdev release [--dry-run] [--target <branch>]...
 | `-h`, `--help`      | Show usage                                                                                   |
 | `--version`         | Show the version                                                                             |
 
-Exit codes: `0` on success, `1` when the release is refused or fails, `2` on invalid usage (an unknown option or a positional argument), `3` when the release was pushed but the GitHub Release failed (see [Failure recovery](#release-failure-recovery)).
+| Code | Meaning                                                                                                         |
+| ---- | --------------------------------------------------------------------------------------------------------------- |
+| `0`  | Released                                                                                                        |
+| `1`  | The release was refused or failed; nothing was pushed                                                           |
+| `2`  | Invalid usage (an unknown option or a positional argument)                                                      |
+| `3`  | Released and pushed, but the GitHub Release was not created (see [Failure recovery](#release-failure-recovery)) |
 
 ```bash
 npm run release -- --dry-run               # preview every target
@@ -889,7 +912,7 @@ npm run release                            # release
 
 Run it from the released commit, after `git flow release finish` and the build:
 
-1. **Preflight**, before anything is modified: the working tree is clean (the tool's own `.worktrees/` is ignored), `vX.Y.Z` exists and points at `HEAD`, the `@version` header of `peer/<name>.peer.types.d.ts` (when that file exists) equals `package.json`'s `version`, every target's build directory contains a `.js` file, every `files` and `include` source exists, and `<branch>/vX.Y.Z` exists neither locally nor on the remote. With `githubRelease` on, it also requires a GitHub remote, `vX.Y.Z` on the remote at the same commit, a working authenticated `gh`, and rulesets that protect every target branch (`deletion`, `non_fast_forward`) and all tags (`deletion`, `non_fast_forward`, `update` on `~ALL`). Bump the `@version` header in the git-flow release branch together with the version, because the check runs on the tagged commit.
+1. **Preflight**, before anything is modified: the working tree is clean (the tool's own `.worktrees/` is ignored), `vX.Y.Z` exists and points at `HEAD`, the `@version` header of `peer/<name>.peer.types.d.ts` (when that file exists) equals `package.json`'s `version`, every target's build directory contains a `.js` file, every `files` and `include` source exists, and `<branch>/vX.Y.Z` exists neither locally nor on the remote. With `githubRelease` on, it also requires a GitHub remote, `vX.Y.Z` on the remote at the same commit, a working authenticated `gh` and the rulesets described under [GitHub Release](#github-release). Bump the `@version` header in the git-flow release branch together with the version, because the check runs on the tagged commit.
 2. **Sync**: for each target, fetches `<remote>/<branch>` if it exists and prepares a worktree at `.worktrees/<branch>` (reusing it, checking out the local branch, tracking the remote branch, or creating an orphan branch for a first release). The local branch is fast-forwarded to the remote; if it has commits the remote lacks, the release is refused.
 3. **Stage**: clears the worktree, copies the build minus `exclude` and `hide`, the `include` trees, the `files` and the generated `package.json`, then runs `git add -A`.
 4. **Guard**: fails with "Nothing to release" when no target has staged changes. Targets without changes are skipped and get no tag.
@@ -912,9 +935,7 @@ For the default target the release tag is `dist/vX.Y.Z`.
 
 A dry run never commits, tags or pushes. Like a real run it fetches the remote branch and fast-forwards the local dist branch to it, so those local ref updates remain. It exits `1` with "Nothing to release" in the same situations as a real run, so CI can detect it.
 
-With `githubRelease` on, the dry run also reports the GitHub Release outcome: would be created, already exists (skipped), or a draft exists (skipped).
-
-With `githubRelease` on, the dry run also refuses repositories whose rulesets do not protect the target branches and tags.
+With `githubRelease` on, the dry run also reports the GitHub Release outcome (would be created, already exists (skipped), or a draft exists (skipped)) and refuses repositories that do not meet the [ruleset requirement](#github-release).
 
 #### Release configuration
 
@@ -942,7 +963,7 @@ The tool does not push `vX.Y.Z`; push it yourself (`git push <remote> vX.Y.Z`) b
 - **Notes**: the `## [X.Y.Z]` section of `CHANGELOG.md` (`[vX.Y.Z]` is also accepted). If there is none, the tag annotation is used, and otherwise the title `vX.Y.Z`.
 - **Auth**: `gh auth login` locally, or `GH_TOKEN`/`GITHUB_TOKEN` in CI.
 - **Existing releases**: if a Release for `vX.Y.Z` exists, it is left untouched. A draft counts as existing, so publish or delete it yourself.
-- **Rulesets**: every target branch needs `deletion` and `non_fast_forward`, and an active tag ruleset on `~ALL` (no exclusions) needs `deletion`, `non_fast_forward` and `update`. Organization rulesets count. Run `npx gasdev github --fix` (needs admin rights) to apply them.
+- **Rulesets**: every target branch needs `deletion` and `non_fast_forward`, and an active tag ruleset on `~ALL` (no exclusions) needs `deletion`, `non_fast_forward` and `update`. Organization rulesets count. Run `npx gasdev github --fix` (needs admin rights) to apply them; see [GitHub rulesets](#github-rulesets).
 
 ##### Target fields
 
@@ -958,11 +979,11 @@ Each target is merged over these defaults. Paths are relative to the project roo
 | `files`       | `["README.md", "LICENSE.md", "CHANGELOG.md"]` | Project files copied into the branch; `"src:dest"` renames. Replaces the default list                    |
 | `packageJson` | `true`                                        | Write the trimmed `package.json` (name, version, description, license, author, repository, `gasLibrary`) |
 
-Unknown keys in `gasdev.release`, in a target or in an `include` entry are rejected, naming the key path (for example `gasdev.release.targets[1].pakageJson is not a known option`).
+The validation rules are in [The gasdev key](#the-gasdev-key).
 
 ##### Library metadata
 
-Libraries declare their load order, and optionally their peer libraries, in the `gasdev` key of `package.json` (next to `release`), which `gasdev check` validates:
+Libraries declare their load order, and optionally their peer libraries, in the `gasdev` key of `package.json` (next to `release`), which `gasdev check` validates (see [The gasdev key](#the-gasdev-key)):
 
 ```jsonc
 "gasdev": {
@@ -1051,15 +1072,6 @@ If `githubRelease` is on and the push succeeded but the GitHub Release could not
 gh release create vX.Y.Z -R owner/repo --verify-tag --title vX.Y.Z --notes-file .worktrees/github-release-vX.Y.Z.md
 ```
 
-Exit codes:
-
-| Code | Meaning                                                                 |
-| ---- | ----------------------------------------------------------------------- |
-| `0`  | Released                                                                |
-| `1`  | The release was refused or failed; nothing was pushed                   |
-| `2`  | Invalid usage                                                           |
-| `3`  | Released and pushed, but the GitHub Release was not created (see above) |
-
 ### GitHub rulesets
 
 `gasdev github` keeps the repository rulesets the same in every gas-\* repo. Two rulesets, `branches` and `tags`, come from templates shipped with this package:
@@ -1074,7 +1086,13 @@ npx gasdev github         # report drift against the templates
 npx gasdev github --fix   # create missing rulesets and update drifted ones
 ```
 
-Exit codes: `0` in sync (or fixed), `1` drift or failure, `2` usage error. Rulesets that are not in the template are reported but never changed or deleted. The command is not part of `check`, which stays offline. See [ADR 0009](docs/adr/0009-github-rulesets.md).
+| Code | Meaning            |
+| ---- | ------------------ |
+| `0`  | In sync (or fixed) |
+| `1`  | Drift or failure   |
+| `2`  | Usage error        |
+
+The release requirement for these rulesets is stated under [GitHub Release](#github-release). Rulesets that are not in the template are reported but never changed or deleted. The command is not part of `check`, which stays offline. See [ADR 0009](docs/adr/0009-github-rulesets.md).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -1087,7 +1105,7 @@ Setup and CI deployment for Google Apps Script projects: a guided `gasdev setup`
 - A project with `npm run check` and `npm run build` scripts (or custom commands, see [Workflow inputs](#workflow-inputs-and-outputs)) and a built `<rootDir>/appsscript.json`
 - A GitHub environment per target, with the secret and variables below
 - The Apps Script API enabled at https://script.google.com/home/usersettings
-- `@google/clasp` as a dev dependency: `npm install -D @google/clasp`
+- `@google/clasp` as a dev dependency (see [Requirements](#requirements))
 
 The workflow runs the CLI with `npx --no-install`, so a missing dependency fails instead of fetching an unrelated package. Add a script for the wizard:
 
@@ -1099,17 +1117,13 @@ The workflow is referenced by an exact tag (`@v3.0.0`) and the CLI by a semver r
 
 ### Setup
 
-Step 1 is done once per Google account, steps 2-4 once per repository, steps 5-8 once per environment (`dev`, `live`), and steps 9-10 once.
+Step 1 is done once per Google account, steps 2-3 once per repository, steps 4-7 once per environment (`dev`, `live`), and steps 8-9 once.
 
 #### 1. Enable the Apps Script API
 
-Enable the [Apps Script API](https://script.google.com/home/usersettings) for the Google account that owns the scripts, ideally a dedicated account.
+Install the CLI first (see [Requirements and install](#requirements-and-install)). Then enable the [Apps Script API](https://script.google.com/home/usersettings) for the Google account that owns the scripts, ideally a dedicated account.
 
-#### 2. Install the CLI
-
-See [Requirements and install](#requirements-and-install).
-
-#### 3. Commit the clasp and manifest templates
+#### 2. Commit the clasp and manifest templates
 
 Commit `.clasp.example.json` and `appsscript.example.json` at the project root; the [setup wizard](#configuration-3) requires both. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
 
@@ -1119,17 +1133,17 @@ Commit `.clasp.example.json` and `appsscript.example.json` at the project root; 
 
 Add `.clasp.json` to `.gitignore`: the CLI overwrites it from the template plus `GAS_SCRIPT_ID`.
 
-#### 4. Provide `check` and `build`
+#### 3. Provide `check` and `build`
 
 Define `npm run check` and `npm run build` scripts, or override them with the [workflow inputs](#workflow-inputs-and-outputs). The build must produce `<rootDir>/appsscript.json`. Web apps declare `oauthScopes` explicitly; see [Scope changes](#scope-changes).
 
-#### 5. Create the Apps Script project and web app deployment
+#### 4. Create the Apps Script project and web app deployment
 
 For web apps, run `npm run deploy:setup` (the [setup wizard](#setup-wizard)) and read `GAS_SCRIPT_ID` and `GAS_DEPLOYMENT_ID` from `.env`. Manually: copy the Script ID from Project Settings, then Deploy > New deployment > Web app, and copy the deployment ID (versioned, not HEAD). CI never creates the first deployment, because it requires an interactive consent prompt; this applies to both `npm run deploy:setup` and the editor path. `deploy:setup` writes the IDs to `.env` and has no per-environment option, so record them before running it again for the next environment.
 
 Libraries and bound scripts need only the script ID; see [Project types](#project-types). Use a separate script per environment.
 
-#### 6. Create the GitHub environment restricted to its branch
+#### 5. Create the GitHub environment restricted to its branch
 
 Example for `dev` and `develop`; repeat for `live` and `main`. The deployment branch policy releases `CLASPRC_JSON` only to runs on that branch:
 
@@ -1143,7 +1157,7 @@ gh api -X POST repos/{owner}/{repo}/environments/dev/deployment-branch-policies 
 
 Alternatively, in the UI: Settings > Environments > New environment > Deployment branches and tags > Selected branches.
 
-#### 7. Set the variables
+#### 6. Set the variables
 
 ```sh
 gh variable set GAS_SCRIPT_ID --env dev --body <script-id>
@@ -1152,9 +1166,9 @@ gh variable set GAS_DEPLOYMENT_ID --env dev --body <deployment-id>
 
 `GAS_DEPLOYMENT_ID` is for web apps only. These are variables, not secrets; see [Environments](#environments).
 
-#### 8. Store `CLASPRC_JSON`
+#### 7. Store `CLASPRC_JSON`
 
-Run `npx clasp login` (or `npm run deploy:setup`, which logs in) on a trusted machine, ideally with a dedicated Google account that owns the scripts. Then store the credentials in the environment; repeat for `live`:
+Run `npx clasp login` (or `npm run deploy:setup`, which logs in) on a trusted machine, ideally with a dedicated Google account that owns the scripts. Then store the credentials in the environment:
 
 ```sh
 gh secret set CLASPRC_JSON --env dev < ~/.clasprc.json
@@ -1162,11 +1176,11 @@ gh secret set CLASPRC_JSON --env dev < ~/.clasprc.json
 
 See [Token expiry, revocation and rotation](#token-expiry-revocation-and-rotation).
 
-#### 9. Add the caller workflow
+#### 8. Add the caller workflow
 
 Add the workflow from [Usage](#usage) at `.github/workflows/deploy.yml`.
 
-#### 10. Verify the first run
+#### 9. Verify the first run
 
 Push to `develop`, then merge to `main` and confirm the `live` run. The job summary and the `url` output show the web app URL; a push-only project shows no URL. On a scope-change failure, follow [Scope changes](#scope-changes). On `invalid_grant`, follow [token rotation](#token-expiry-revocation-and-rotation).
 
@@ -1187,7 +1201,12 @@ The wizard runs these steps in order:
 5. **Deployment:** open the script editor, wait while you deploy the web app, then read the deployment and confirm its URL.
 6. **Summary:** script ID, web app URL, deployment ID and version.
 
-Exit codes: `0` success, `1` failed deployment, `2` invalid usage, `130` cancelled.
+| Code  | Meaning           |
+| ----- | ----------------- |
+| `0`   | Success           |
+| `1`   | Failed deployment |
+| `2`   | Invalid usage     |
+| `130` | Cancelled         |
 
 #### Configuration
 
@@ -1203,7 +1222,7 @@ Options live in `package.json` under `gasdev.ci`:
 | `title` | string | `package.json` `"name"` | Title of a new Apps Script project |
 | `steps` | string | none                    | Module with project-defined steps  |
 
-Unknown keys are rejected.
+The validation rules are in [The gasdev key](#the-gasdev-key).
 
 #### Custom steps
 
@@ -1399,11 +1418,11 @@ gasdev deploy
 
 `.clasp.json` is rendered from `.clasp.example.json` plus the script ID (`rootDir` must be absent or a relative path without `..`). Under `GITHUB_ACTIONS=true` every string of `CLASPRC_JSON` with 8 or more characters is masked in the logs.
 
-| Exit code | Meaning                                                                       |
-| --------- | ----------------------------------------------------------------------------- |
-| 0         | Deployed, or help or version printed                                          |
-| 1         | Deployment failed: invalid inputs, scope change, missing build or clasp error |
-| 2         | Invalid usage                                                                 |
+| Code | Meaning                                                                       |
+| ---- | ----------------------------------------------------------------------------- |
+| `0`  | Deployed, or help or version printed                                          |
+| `1`  | Deployment failed: invalid inputs, scope change, missing build or clasp error |
+| `2`  | Invalid usage                                                                 |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
