@@ -1270,7 +1270,7 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
 }
 ```
 
-`loadOrder`, `peers`, `gasTest` and `html` are also read from `gasdev`, for the `gas` preset only. Any other key or preset value is an error.
+`loadOrder`, `peers`, `gasTest` and `html` are also read from `gasdev`, for the `gas` preset only. `bundle`, `release` and `ci` are accepted with either preset and are only checked to be objects; see [Bundle](#bundle), [Release configuration](#release-configuration) and the [setup wizard](#setup-wizard). Any other key or preset value is an error.
 
 ```json
 {
