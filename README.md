@@ -135,7 +135,7 @@ For a new project:
 2. For plain JavaScript tooling, set `"gasdev": { "preset": "node" }` in `package.json`.
 3. Run `npx gasdev init` to create the ignore files, `.github/dependabot.yml` and the missing required scripts.
 4. Add the config `init` does not create: [Prettier](#prettier), [TypeScript](#typescript) and [ESLint](#eslint). Add the `build`, `build:watch` and `typecheck` scripts, which `init` only expects to exist, and `rimraf` as a dev dependency for the `clean` script.
-5. Run `npm install` again if you added dependencies, then `npm run check`.
+5. Run `npm install` again to install the dependencies you added in step 4 (including `rimraf`), then `npm run check`.
 
 For an existing project, follow [Migrating an existing project](#migrating-an-existing-project).
 
@@ -942,7 +942,7 @@ See [Requirements and install](#requirements-and-install).
 
 ##### 3. Commit the clasp and manifest templates
 
-Commit `.clasp.example.json` and `appsscript.example.json` at the project root; the [setup wizard](#configuration-3) requires both. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` (relative, no `..`) is where the build writes `appsscript.json`:
+Commit `.clasp.example.json` and `appsscript.example.json` at the project root; the [setup wizard](#configuration-3) requires both. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
 
 ```json
 { "rootDir": "dist" }
@@ -1405,7 +1405,7 @@ Exit codes: `0` in sync (or fixed), `1` drift or failure, `2` usage error. Rules
 7. For plain JavaScript tooling, add `"gasdev": { "preset": "node" }` to `package.json`.
 8. Run `npx gasdev init` to add `.github/dependabot.yml`, the ignore lines and the missing required scripts.
 9. Add `gasdev check` to the `check` script (if `init` added it, this is already done) and align the scripts `init` did not change with what the check reports.
-10. Run `npm run check`. It must pass with no source changes: `prettier --check`, `eslint` and `tsc` are clean.
+10. Run `npm install` to prune the removed dependencies, then `npm run check`. It must pass with no source changes: `prettier --check`, `eslint` and `tsc` are clean.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
