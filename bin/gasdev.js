@@ -46,7 +46,8 @@ init scaffolds a new project: it creates or completes those ignore files, create
 overwrites an existing file or script, then prints the check report.
 
 The preset is read from package.json: "gasdev": { "preset": "gas" | "node" }
-(default: gas). "loadOrder", "peers", "gasTest" and "html" are also validated.
+(default: gas). "loadOrder", "peers", "gasTest" and "html" (gas preset only)
+and "bundle", "release" and "ci" are also validated.
 
 Commands:
   check            Compare the project in the current directory with the templates
