@@ -51,7 +51,7 @@
 
 ### Features
 
-- One Prettier config, four TypeScript presets and one ESLint flat-config factory, so a tooling change is made once and rolled out by bumping a version
+- One Prettier config, five TypeScript presets and one ESLint flat-config factory, so a tooling change is made once and rolled out by bumping a version
 - Uses each tool's own extension mechanism (shared Prettier config, tsconfig `extends`, exported ESLint factory) instead of copying files
 - ESLint `gas` preset for Apps Script TypeScript, with a `web` option for browser sources and a `node` preset for plain JavaScript tooling
 - `gasdev check` reports drift of the files that cannot be extended: `.gitignore`, `.prettierignore`, `.github/dependabot.yml` and the standard `package.json` scripts
@@ -61,6 +61,9 @@
 - `gasdev gas-test` builds a library's tests into one script that runs in real Apps Script, from the editor or through clasp
 - `gasdev html` inlines a page edited as `.html`, `.css` and TypeScript into one generated `.ts` string constant, so an HtmlService UI ships as a single Apps Script source file
 - `gasdev peers sync` writes the peer libraries' type declarations into `src/internal/` from their tagged releases, so they never drift from hand copies
+- `gasdev bundle` bundles gas-\* libraries from their `dist/vX.Y.Z` tags into one global script file, in load order, for an Apps Script project that uses several libraries
+- `gasdev release` publishes a library's build to one or more dist branches with `<branch>/vX.Y.Z` tags in a single atomic push, after preflight checks, with a `--dry-run` preview
+- `gasdev github` reports drift of the repository's GitHub rulesets from the shipped templates and, with `--fix`, creates or updates them
 - `gasdev setup` and `gasdev deploy` take an Apps Script web app from a guided first-time setup to clasp-based CI deployment, with a reusable GitHub Actions workflow
 - Plain ESM JavaScript, no build step
 
