@@ -9,7 +9,7 @@
 
 - [About gasdev](#about-gasdev)
   - [Features](#features)
-  - [The gasdev tools](#gasdev-tools)
+  - [How the tools fit together](#gasdev-tools)
 - [Getting started](#getting-started)
   - [Requirements](#requirements)
   - [Install](#install)
@@ -69,15 +69,11 @@
 
 <a id="gasdev-tools"></a>
 
-### The gasdev tools
+<a id="the-gasdev-tools"></a>
 
-Development tools for Apps Script libraries and projects. None of them is ever pushed to Apps Script.
+### How the tools fit together
 
-| Tool                    | Installed by                             | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ----------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `gasdev` (this package) | Library authors and Apps Script projects | Prettier, TypeScript and ESLint presets; `check` for config drift; the `gasdev` key (`loadOrder`, `peers`, `gasTest`, `html`, `bundle`, `release`, `ci`); the Vitest loader; Apps Script tests (`gas-test build`/`run`); the HTML build (`html`); bundling gas-\* libraries (`bundle`); peer type sync (`peers sync`); publishing the build to the `dist` branch with tags (`release`); GitHub rulesets (`github`); guided web-app setup (`setup`) and CI deployment (`deploy`, reusable workflow) |
-
-It is a dev dependency installed from GitHub with a `#semver:` range. A library uses it for presets and `release`; a project consuming several libraries uses `gasdev bundle` (a single library can be added with `git subtree` instead); a project that deploys a web app uses `gasdev setup` and `gasdev deploy`.
+A library uses `gasdev` for presets and `release`; a project consuming several libraries uses `gasdev bundle` (a single library can be added with `git subtree` instead); a project that deploys a web app uses `gasdev setup` and `gasdev deploy`.
 
 The tools are connected by one piece of metadata, declared once in the library:
 
