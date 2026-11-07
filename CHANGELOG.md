@@ -39,6 +39,7 @@
 - README documents the `bundle`, `release` and `ci` keys under Config check and the legacy-key error under Migrating to 3.0
 - Dev-only: clasp-bin tests build expected `package.json` file URLs portably, so they pass on Windows
 - `gasdev --help` lists `bundle`, `release` and `ci` among the validated `gasdev` keys
+- README setup steps name `eslint`, `prettier`, `typescript` and the optional `@google/clasp` as the npm peer dependencies to install with `gasdev`
 
 ### Removed
 
