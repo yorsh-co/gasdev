@@ -320,7 +320,7 @@ export default gasEslint(
 
 ## Config check
 
-Prettier, TypeScript and ESLint are shared through their own extension mechanisms. Four things have none, so `gasdev check` compares them with templates and reports the drift:
+Prettier, TypeScript and ESLint are shared through their own extension mechanisms. Four things have none, so `gasdev check` compares them with templates and reports the [drift](#key-terms):
 
 ```
 gasdev check [--fix]
@@ -390,15 +390,15 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
   - `out` and `name` are unique. Missing entry files, stale or missing generated files, and an `out` absent from `loadOrder` are reported as drift.
   - It requires `loadOrder`.
 - `bundle` configures [Bundle](#bundle).
-  - An object with the keys `libraries`, `outFile` and `typesFile`; `libraries` is required.
+  - Validated by `gasdev bundle`, not by `check`: an object with the keys `libraries`, `outFile` and `typesFile`; `libraries` is required.
   - Library names match `/^[a-z0-9][a-z0-9._-]*$/`. A library is a semver range, or `{ version, repository? }` where `version` is a valid semver range and `repository` is a non-empty Git URL or path.
   - `outFile` and `typesFile` are relative to the project root, with no `..`, ending in `.js` and `.d.ts` respectively.
   - Unknown keys are rejected with their path, for example `gasdev.bundle.libraries.gas-lock.repositry is not a known option.`
 - `release` configures [Release configuration](#release-configuration).
-  - An object with the keys `remote`, `targets` and `githubRelease`; `targets` is a non-empty list of targets with unique branches.
+  - Validated by `gasdev release`, not by `check`: an object with the keys `remote`, `targets` and `githubRelease`; `targets` is optional (default: one `dist` target); when given, a non-empty list with unique branches.
   - Unknown keys in `gasdev.release`, in a target or in an `include` entry are rejected, naming the key path (for example `gasdev.release.targets[1].pakageJson is not a known option`).
 - `ci` configures the [setup wizard](#configuration-3).
-  - An object with the keys `title` and `steps`; any other key is rejected.
+  - Validated by `gasdev setup`, not by `check`: an object with the keys `title` and `steps`; any other key is rejected.
 - `loadOrder`, `peers`, `gasTest` and `html` with the `node` preset are an error.
 
 ### What is checked
@@ -465,11 +465,12 @@ updates:
 
 ### Test loader
 
-Use `createGasLoader` from `gasdev/test` to unit-test Apps Script sources in Node. They share one global scope and have no `import` or `export`, so a test cannot import them. The loader transpiles the files once, concatenates them in load order and compiles a single `node:vm` script. Each call of the returned function evaluates it in a fresh context built from the globals you pass, so no state leaks between tests.
+Use `createGasLoader` from `gasdev/test` to unit-test Apps Script sources in Node. They share one global scope and have no `import` or `export`, so a test cannot import them. The loader transpiles the files once, concatenates them in [load order](#key-terms) and compiles a single `node:vm` script. Each call of the returned function evaluates it in a fresh context built from the globals you pass, so no state leaks between tests.
 
 ```ts
 // test/harness.ts
 import { createGasLoader } from 'gasdev/test';
+import { createFakeSpreadsheetApp, createFakeLogger } from './fakes';
 
 const load = createGasLoader({
   files: ['src/gas-logger.types.ts', 'src/gas-logger.class.ts'],
@@ -496,7 +497,7 @@ const { GasLogger } = load({ console, SpreadsheetApp, Logger });
 
 #### Load order from `package.json`
 
-Keep the load order in one place: `gasdev.loadOrder` in `package.json` (see [Config check](#config-check)). `loadOrderFiles(root?)` returns it as `src/`-prefixed POSIX paths relative to `root` (default `process.cwd()`), ready for `files`:
+Keep the load order in one place: `gasdev.loadOrder` in `package.json` (see [The gasdev key](#the-gasdev-key)). `loadOrderFiles(root?)` returns it as `src/`-prefixed POSIX paths relative to `root` (default `process.cwd()`), ready for `files`:
 
 ```ts
 import { createGasLoader, loadOrderFiles } from 'gasdev/test';
@@ -872,7 +873,7 @@ Use `gasdev peers sync [--check]` in a library with peers: it keeps `src/interna
 
 ### Release
 
-Use `gasdev release` to publish the build of a gas-\* library to its dist branch(es) with tags, so consumers can `git subtree` the compiled output without any TypeScript or ESLint tooling.
+Use `gasdev release` to publish the build of a gas-\* library to its [dist branch](#key-terms)(es) with tags, so consumers can `git subtree` the compiled output without any TypeScript or ESLint tooling.
 
 - Zero configuration for single-target libraries; multi-target projects (for example a backend branch plus a web client branch) are configuration, not a fork
 - Multi-target releases are all-or-nothing: every branch and tag is pushed in a single atomic `git push`
@@ -1154,11 +1155,13 @@ The workflow is referenced by an exact tag (`@v3.0.0`) and the CLI by a semver r
 
 ### Setup
 
+Install the CLI first (see [Requirements and install](#requirements-and-install)).
+
 Step 1 is done once per Google account, steps 2-3 once per repository, steps 4-7 once per environment (`dev`, `live`), and steps 8-9 once.
 
 #### 1. Enable the Apps Script API
 
-Install the CLI first (see [Requirements and install](#requirements-and-install)). Then enable the [Apps Script API](https://script.google.com/home/usersettings) for the Google account that owns the scripts, ideally a dedicated account.
+Enable the [Apps Script API](https://script.google.com/home/usersettings) for the Google account that owns the scripts, ideally a dedicated account.
 
 #### 2. Commit the clasp and manifest templates
 
