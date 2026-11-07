@@ -37,6 +37,7 @@
 - `gasdev github` reports non-JSON gh output as an error instead of crashing
 - README lists `gasdev setup` and `gasdev deploy`, not only `gasdev gas-test run`, as needing `@google/clasp`
 - Dev-only: clasp-bin tests build expected `package.json` file URLs portably, so they pass on Windows
+- `gasdev --help` lists `bundle`, `release` and `ci` among the validated `gasdev` keys
 
 ### Removed
 
