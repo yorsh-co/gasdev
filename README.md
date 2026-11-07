@@ -25,6 +25,7 @@
   - [Release](#release)
   - [Deploy a web app](#deploy-a-web-app)
   - [Config check](#config-check)
+  - [Peer types](#peer-types)
   - [Dependabot](#dependabot)
   - [GitHub rulesets](#github-rulesets)
 - [Migrating an existing project](#migrating-an-existing-project)
@@ -1247,8 +1248,6 @@ It reads the project in the current directory and writes nothing unless `--fix` 
 | `-h`, `--help` | Show usage                                                                                        |
 | `--version`    | Show the version                                                                                  |
 
-`gasdev html [--check]` is described in [HTML build](#html-build).
-
 Exit codes: `0` when the project matches, `1` on drift or an unusable `package.json`, `2` on invalid usage (a missing or unknown command, an unknown option).
 
 #### Presets
@@ -1291,25 +1290,6 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
   - It requires `loadOrder`.
 - Any of these keys with the `node` preset is an error.
 
-#### Peer types
-
-`gasdev peers sync [--check]` keeps `src/internal/<peer>.peer.types.d.ts` in step with the libraries listed in `gasdev.peers`.
-
-- For each peer it lists the `vX.Y.Z` tags of `https://github.com/yorsh-co/<peer>.git`, picks the highest one that satisfies the range, and reads `peer/<peer>.peer.types.d.ts` at that tag. Other tags, such as `dist/vX.Y.Z`, are ignored.
-- The file is written to `src/internal/` byte for byte, except that the ` * @version` line is removed. A peer patch release that leaves the declarations unchanged therefore produces no diff.
-- Every peer is resolved and fetched before anything is written. A missing `peers` key, an invalid range, a range without a matching tag, a tag without the peer file or an unreachable repository is an error (exit 1).
-- `--check` writes nothing and exits 1 if any file is missing or differs.
-- It needs network access and `git`, so it is not part of `npm run check`. Add the scripts to the library:
-
-```json
-{
-  "scripts": {
-    "peers:sync": "gasdev peers sync",
-    "peers:check": "gasdev peers sync --check"
-  }
-}
-```
-
 #### What is checked
 
 | File                     | Rule                                                                                                                                                                      |
@@ -1348,6 +1328,25 @@ The `gas` preset also requires `build`, `build:watch` and `typecheck` to exist, 
 For the `node` preset the required scripts are `typecheck` (`tsc --noEmit && echo '✓ TypeScript passed'`), `lint`, `lint:fix`, `format`, `format:check`, `check`, `test` and `test:watch`, with the same values as above. No script is merely required to be present.
 
 Add the check to your `check` script, as in the values above, so `npm run check` fails on drift.
+
+### Peer types
+
+`gasdev peers sync [--check]` keeps `src/internal/<peer>.peer.types.d.ts` in step with the libraries listed in `gasdev.peers`.
+
+- For each peer it lists the `vX.Y.Z` tags of `https://github.com/yorsh-co/<peer>.git`, picks the highest one that satisfies the range, and reads `peer/<peer>.peer.types.d.ts` at that tag. Other tags, such as `dist/vX.Y.Z`, are ignored.
+- The file is written to `src/internal/` byte for byte, except that the ` * @version` line is removed. A peer patch release that leaves the declarations unchanged therefore produces no diff.
+- Every peer is resolved and fetched before anything is written. A missing `peers` key, an invalid range, a range without a matching tag, a tag without the peer file or an unreachable repository is an error (exit 1).
+- `--check` writes nothing and exits 1 if any file is missing or differs.
+- It needs network access and `git`, so it is not part of `npm run check`. Add the scripts to the library:
+
+```json
+{
+  "scripts": {
+    "peers:sync": "gasdev peers sync",
+    "peers:check": "gasdev peers sync --check"
+  }
+}
+```
 
 ### Dependabot
 
