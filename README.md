@@ -9,7 +9,7 @@
 
 - [About gasdev](#about-gasdev)
   - [Features](#features)
-  - [The gasdev tools](#gasdev-tools)
+  - [How the tools fit together](#gasdev-tools)
 - [Getting started](#getting-started)
   - [Requirements](#requirements)
   - [Install](#install)
@@ -25,6 +25,7 @@
   - [Release](#release)
   - [Deploy a web app](#deploy-a-web-app)
   - [Config check](#config-check)
+  - [Peer types](#peer-types)
   - [Dependabot](#dependabot)
   - [GitHub rulesets](#github-rulesets)
 - [Migrating an existing project](#migrating-an-existing-project)
@@ -51,30 +52,28 @@
 
 ### Features
 
-- One Prettier config, four TypeScript presets and one ESLint flat-config factory, so a tooling change is made once and rolled out by bumping a version
+- One Prettier config, five TypeScript presets and one ESLint flat-config factory, so a tooling change is made once and rolled out by bumping a version
 - Uses each tool's own extension mechanism (shared Prettier config, tsconfig `extends`, exported ESLint factory) instead of copying files
 - ESLint `gas` preset for Apps Script TypeScript, with a `web` option for browser sources and a `node` preset for plain JavaScript tooling
-- `gasdev check` reports drift of the files that cannot be extended: `.gitignore`, `.prettierignore`, `.github/dependabot.yml` and the standard `package.json` scripts
-- The check is read-only unless you pass `--fix`, which only appends missing template lines to `.gitignore` and `.prettierignore`
+- `gasdev check` reports drift of the files that cannot be extended: `.gitignore`, `.prettierignore`, `.github/dependabot.yml` and the standard `package.json` scripts; it is read-only unless you pass `--fix`, which only appends missing template lines to `.gitignore` and `.prettierignore`
 - `gasdev init` scaffolds a new project: ignore files, `.github/dependabot.yml` and the missing required scripts, without overwriting anything
 - `gasdev/test` loads Apps Script sources, which are global-scope scripts without exports, into a fresh `node:vm` context for Vitest suites
 - `gasdev gas-test` builds a library's tests into one script that runs in real Apps Script, from the editor or through clasp
 - `gasdev html` inlines a page edited as `.html`, `.css` and TypeScript into one generated `.ts` string constant, so an HtmlService UI ships as a single Apps Script source file
 - `gasdev peers sync` writes the peer libraries' type declarations into `src/internal/` from their tagged releases, so they never drift from hand copies
+- `gasdev bundle` bundles gas-\* libraries from their `dist/vX.Y.Z` tags into one global script file, in load order, for an Apps Script project that uses several libraries
+- `gasdev release` publishes a library's build to one or more dist branches with `<branch>/vX.Y.Z` tags in a single atomic push, after preflight checks, with a `--dry-run` preview
+- `gasdev github` reports drift of the repository's GitHub rulesets from the shipped templates and, with `--fix`, creates or updates them
 - `gasdev setup` and `gasdev deploy` take an Apps Script web app from a guided first-time setup to clasp-based CI deployment, with a reusable GitHub Actions workflow
 - Plain ESM JavaScript, no build step
 
 <a id="gasdev-tools"></a>
 
-### The gasdev tools
+<a id="the-gasdev-tools"></a>
 
-Development tools for Apps Script libraries and projects. None of them is ever pushed to Apps Script.
+### How the tools fit together
 
-| Tool                    | Installed by                             | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ----------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `gasdev` (this package) | Library authors and Apps Script projects | Prettier, TypeScript and ESLint presets; `check` for config drift; the `gasdev` key (`loadOrder`, `peers`, `gasTest`, `html`, `bundle`, `release`, `ci`); the Vitest loader; Apps Script tests (`gas-test build`/`run`); the HTML build (`html`); bundling gas-\* libraries (`bundle`); peer type sync (`peers sync`); publishing the build to the `dist` branch with tags (`release`); GitHub rulesets (`github`); guided web-app setup (`setup`) and CI deployment (`deploy`, reusable workflow) |
-
-It is a dev dependency installed from GitHub with a `#semver:` range. A library uses it for presets and `release`; a project consuming several libraries uses `gasdev bundle` (a single library can be added with `git subtree` instead); a project that deploys a web app uses `gasdev setup` and `gasdev deploy`.
+A library uses `gasdev` for presets and `release`; a project consuming several libraries uses `gasdev bundle` (a single library can be added with `git subtree` instead); a project that deploys a web app uses `gasdev setup` and `gasdev deploy`.
 
 The tools are connected by one piece of metadata, declared once in the library:
 
@@ -576,8 +575,6 @@ gasdev html [--check]
 1. Make `build:frontend` run `gasdev html` after the frontend compile, for example `tsc -p tsconfig.frontend.json && gasdev html`.
 2. Commit the generated file: tests, Apps Script tests and type-checking load it from `loadOrder`.
 3. `npm run check` fails with drift when it is stale, because `gasdev check` is part of it. No script of the project is required by this feature.
-
-<a id="bundle"></a>
 
 ### Bundle
 
@@ -1251,8 +1248,6 @@ It reads the project in the current directory and writes nothing unless `--fix` 
 | `-h`, `--help` | Show usage                                                                                        |
 | `--version`    | Show the version                                                                                  |
 
-`gasdev html [--check]` is described in [HTML build](#html-build).
-
 Exit codes: `0` when the project matches, `1` on drift or an unusable `package.json`, `2` on invalid usage (a missing or unknown command, an unknown option).
 
 #### Presets
@@ -1267,7 +1262,7 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
 }
 ```
 
-`loadOrder`, `peers`, `gasTest` and `html` are also read from `gasdev`, for the `gas` preset only. Any other key or preset value is an error.
+`loadOrder`, `peers`, `gasTest` and `html` are also read from `gasdev`, for the `gas` preset only. `bundle`, `release` and `ci` are accepted with either preset and are only checked to be objects; see [Bundle](#bundle), [Release configuration](#release-configuration) and the [setup wizard](#setup-wizard). Any other key or preset value is an error.
 
 ```json
 {
@@ -1294,25 +1289,6 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
   - `out` and `name` are unique. Missing entry files, stale or missing generated files, and an `out` absent from `loadOrder` are reported as drift.
   - It requires `loadOrder`.
 - Any of these keys with the `node` preset is an error.
-
-#### Peer types
-
-`gasdev peers sync [--check]` keeps `src/internal/<peer>.peer.types.d.ts` in step with the libraries listed in `gasdev.peers`.
-
-- For each peer it lists the `vX.Y.Z` tags of `https://github.com/yorsh-co/<peer>.git`, picks the highest one that satisfies the range, and reads `peer/<peer>.peer.types.d.ts` at that tag. Other tags, such as `dist/vX.Y.Z`, are ignored.
-- The file is written to `src/internal/` byte for byte, except that the ` * @version` line is removed. A peer patch release that leaves the declarations unchanged therefore produces no diff.
-- Every peer is resolved and fetched before anything is written. A missing `peers` key, an invalid range, a range without a matching tag, a tag without the peer file or an unreachable repository is an error (exit 1).
-- `--check` writes nothing and exits 1 if any file is missing or differs.
-- It needs network access and `git`, so it is not part of `npm run check`. Add the scripts to the library:
-
-```json
-{
-  "scripts": {
-    "peers:sync": "gasdev peers sync",
-    "peers:check": "gasdev peers sync --check"
-  }
-}
-```
 
 #### What is checked
 
@@ -1352,6 +1328,25 @@ The `gas` preset also requires `build`, `build:watch` and `typecheck` to exist, 
 For the `node` preset the required scripts are `typecheck` (`tsc --noEmit && echo '✓ TypeScript passed'`), `lint`, `lint:fix`, `format`, `format:check`, `check`, `test` and `test:watch`, with the same values as above. No script is merely required to be present.
 
 Add the check to your `check` script, as in the values above, so `npm run check` fails on drift.
+
+### Peer types
+
+`gasdev peers sync [--check]` keeps `src/internal/<peer>.peer.types.d.ts` in step with the libraries listed in `gasdev.peers`.
+
+- For each peer it lists the `vX.Y.Z` tags of `https://github.com/yorsh-co/<peer>.git`, picks the highest one that satisfies the range, and reads `peer/<peer>.peer.types.d.ts` at that tag. Other tags, such as `dist/vX.Y.Z`, are ignored.
+- The file is written to `src/internal/` byte for byte, except that the ` * @version` line is removed. A peer patch release that leaves the declarations unchanged therefore produces no diff.
+- Every peer is resolved and fetched before anything is written. A missing `peers` key, an invalid range, a range without a matching tag, a tag without the peer file or an unreachable repository is an error (exit 1).
+- `--check` writes nothing and exits 1 if any file is missing or differs.
+- It needs network access and `git`, so it is not part of `npm run check`. Add the scripts to the library:
+
+```json
+{
+  "scripts": {
+    "peers:sync": "gasdev peers sync",
+    "peers:check": "gasdev peers sync --check"
+  }
+}
+```
 
 ### Dependabot
 
@@ -1438,6 +1433,8 @@ Add `@google/clasp` as a dev dependency where you run clasp (`gasdev gas-test ru
 | `gasDevCi`      | `gasdev.ci`      |
 
 Inner shapes are unchanged. `gasdev check` verifies that each key is an object.
+
+A `package.json` that still has an old key is rejected with `package.json: "<old>" is no longer supported; move it to "<new>" (see the README section "Migrating to 3.0").`
 
 ### Imports and config references
 
