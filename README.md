@@ -89,7 +89,7 @@ gasdev check             gasdev release               gasdev bundle
 
 `gasdev gas-test build` uses the same bundler as `gasdev bundle` to bundle a library's peers ahead of the library under test.
 
-A library release therefore runs: `npm run check` (presets, tests and `gasdev check`), `npm run test:gas` on the release branch (Apps Script tests, manual), then `npm run build:release` (build, then `gasdev release`).
+A library release therefore runs: `npm run check` (presets, tests and `gasdev check`), `npm run test:gas` on the git-flow release branch (Apps Script tests, manual), then `npm run build:release` (build, then `gasdev release`).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -110,7 +110,7 @@ A library release therefore runs: `npm run check` (presets, tests and `gasdev ch
 
 ### Install
 
-Add it to your project's `package.json` as a dev dependency, pinned to a release tag, together with the peer dependencies:
+Add it to your project's `package.json` as a dev dependency, using a semver range over its release tags, together with the peer dependencies:
 
 ```json
 {
@@ -131,10 +131,11 @@ Add it to your project's `package.json` as a dev dependency, pinned to a release
 
 For a new project:
 
-1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) as dev dependencies (see [Requirements](#requirements) and [Install](#install)).
-2. Run `npx gasdev init` to create the ignore files, `.github/dependabot.yml` and the missing required scripts.
-3. Add the config `init` does not create: [Prettier](#prettier), [TypeScript](#typescript) and [ESLint](#eslint). Add the `build`, `build:watch` and `typecheck` scripts, which `init` only expects to exist, and `rimraf` as a dev dependency for the `clean` script.
-4. Run `npm install`, then `npm run check`.
+1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) as dev dependencies (see [Requirements](#requirements) and [Install](#install)), then run `npm install`.
+2. For plain JavaScript tooling, set `"gasdev": { "preset": "node" }` in `package.json`.
+3. Run `npx gasdev init` to create the ignore files, `.github/dependabot.yml` and the missing required scripts.
+4. Add the config `init` does not create: [Prettier](#prettier), [TypeScript](#typescript) and [ESLint](#eslint). Add the `build`, `build:watch` and `typecheck` scripts, which `init` only expects to exist, and `rimraf` as a dev dependency for the `clean` script.
+5. Run `npm install` again to install the dependencies you added in step 4 (including `rimraf`), then `npm run check`.
 
 For an existing project, follow [Migrating an existing project](#migrating-an-existing-project).
 
@@ -687,12 +688,12 @@ Do not vendor a library with `git subtree` and bundle it too: its globals would 
 - Targets without changes are skipped with a notice and get no commit or tag
 - Consistent `v`-prefixed tags: version tags `vX.Y.Z`, release tags `<branch>/vX.Y.Z`
 - Preflight checks before anything is touched: clean working tree, `vX.Y.Z` at `HEAD`, peer declarations' `@version` matching `package.json`, build present, release tags absent locally and on the remote
-- Never ships `*.types.js` (by default) and removes stale or hidden files already on the release branch
-- Generates a trimmed `package.json` for the release branch
+- Never ships `*.types.js` (by default) and removes stale or hidden files already on the dist branch
+- Generates a trimmed `package.json` for the dist branch
 - `--dry-run` shows the staged diff per target and restores the worktrees; `--target` releases a subset
 - Strict configuration validation: unknown keys fail with the offending key path
 
-Requirements: git with `git worktree` support; a git-flow-style version tag `vX.Y.Z` (matching `version` in `package.json`) pointing at `HEAD`; the build output (default `dist/`) already built, with at least one `.js` file; a remote (default `origin`) that receives the release branches and tags, which must be the canonical (GitHub) remote; and [GitHub CLI](https://cli.github.com) (`gh`), only when `githubRelease` is on.
+Requirements: git with `git worktree` support; a git-flow-style version tag `vX.Y.Z` (matching `version` in `package.json`) pointing at `HEAD`; the build output (default `dist/`) already built, with at least one `.js` file; a remote (default `origin`) that receives the dist branches and tags, which must be the canonical (GitHub) remote; and [GitHub CLI](https://cli.github.com) (`gh`), only when `githubRelease` is on.
 
 The version tag is created by git-flow. Configure it once per clone so `git flow release finish` creates `vX.Y.Z`:
 
@@ -737,7 +738,7 @@ npm run release                            # release
 
 Run it from the released commit, after `git flow release finish` and the build:
 
-1. **Preflight**, before anything is modified: the working tree is clean (the tool's own `.worktrees/` is ignored), `vX.Y.Z` exists and points at `HEAD`, the `@version` header of `peer/<name>.peer.types.d.ts` (when that file exists) equals `package.json`'s `version`, every target's build directory contains a `.js` file, every `files` and `include` source exists, and `<branch>/vX.Y.Z` exists neither locally nor on the remote. With `githubRelease` on, it also requires a GitHub remote, `vX.Y.Z` on the remote at the same commit, and a working authenticated `gh`. It also requires rulesets that protect every target branch (`deletion`, `non_fast_forward`) and all tags (`deletion`, `non_fast_forward`, `update` on `~ALL`). Bump the `@version` header in the release branch together with the version, because the check runs on the tagged commit.
+1. **Preflight**, before anything is modified: the working tree is clean (the tool's own `.worktrees/` is ignored), `vX.Y.Z` exists and points at `HEAD`, the `@version` header of `peer/<name>.peer.types.d.ts` (when that file exists) equals `package.json`'s `version`, every target's build directory contains a `.js` file, every `files` and `include` source exists, and `<branch>/vX.Y.Z` exists neither locally nor on the remote. With `githubRelease` on, it also requires a GitHub remote, `vX.Y.Z` on the remote at the same commit, a working authenticated `gh`, and rulesets that protect every target branch (`deletion`, `non_fast_forward`) and all tags (`deletion`, `non_fast_forward`, `update` on `~ALL`). Bump the `@version` header in the git-flow release branch together with the version, because the check runs on the tagged commit.
 2. **Sync**: for each target, fetches `<remote>/<branch>` if it exists and prepares a worktree at `.worktrees/<branch>` (reusing it, checking out the local branch, tracking the remote branch, or creating an orphan branch for a first release). The local branch is fast-forwarded to the remote; if it has commits the remote lacks, the release is refused.
 3. **Stage**: clears the worktree, copies the build minus `exclude` and `hide`, the `include` trees, the `files` and the generated `package.json`, then runs `git add -A`.
 4. **Guard**: fails with "Nothing to release" when no target has staged changes. Targets without changes are skipped and get no tag.
@@ -758,20 +759,22 @@ For the default target the release tag is `dist/vX.Y.Z`.
 
 `--dry-run` performs the preflight, the sync and the staging exactly as a real run, prints `git diff --cached --stat` for each changed target (or the "No changes — skipped" notice), and then restores each worktree: `git reset --hard` and `git clean -fdx` for an existing branch; for a first release, the empty worktree is removed and no local branch is left behind.
 
-A dry run never commits, tags or pushes. Like a real run it fetches the remote branch and fast-forwards the local release branch to it, so those local ref updates remain. It exits `1` with "Nothing to release" in the same situations as a real run, so CI can detect it.
+A dry run never commits, tags or pushes. Like a real run it fetches the remote branch and fast-forwards the local dist branch to it, so those local ref updates remain. It exits `1` with "Nothing to release" in the same situations as a real run, so CI can detect it.
 
 With `githubRelease` on, the dry run also reports the GitHub Release outcome: would be created, already exists (skipped), or a draft exists (skipped).
 
-The dry run also refuses repositories whose rulesets do not protect the target branches and tags.
+With `githubRelease` on, the dry run also refuses repositories whose rulesets do not protect the target branches and tags.
 
 #### Release configuration
 
 Configuration is optional and lives under the `release` key of `gasdev` in your `package.json`. Without it, a single `dist` target with the defaults below is used.
 
 ```jsonc
-"gasdev.release": {
-  "remote": "origin",
-  "targets": [ { "branch": "dist" } ]
+"gasdev": {
+  "release": {
+    "remote": "origin",
+    "targets": [ { "branch": "dist" } ]
+  }
 }
 ```
 
@@ -796,7 +799,7 @@ Each target is merged over these defaults. Paths are relative to the project roo
 
 | Field         | Default                                       | Description                                                                                              |
 | ------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `branch`      | required                                      | Release branch; also the tag prefix (`<branch>/vX.Y.Z`)                                                  |
+| `branch`      | required                                      | Dist branch; also the tag prefix (`<branch>/vX.Y.Z`)                                                     |
 | `from`        | `"dist"`                                      | Build directory copied to the branch root                                                                |
 | `hide`        | `["*.types.js"]`                              | Globs of files that are never shipped; removed if already on the branch                                  |
 | `exclude`     | `[]`                                          | Globs of `from` subpaths skipped entirely, e.g. `"web/"`                                                 |
@@ -850,24 +853,30 @@ A backend branch and a web client branch, released together:
 
 ```json
 {
-  "gasdev.release": {
-    "targets": [
-      {
-        "branch": "dist",
-        "hide": ["**/types/*.js", "shared/*.js"],
-        "exclude": ["web/"]
-      },
-      {
-        "branch": "dist-web",
-        "from": "dist/web",
-        "hide": ["**/types/*.js"],
-        "include": [
-          { "from": "dist/shared", "to": "shared", "hide": ["*.js"] }
-        ],
-        "files": ["src/web/README.md:README.md", "LICENSE.md", "CHANGELOG.md"],
-        "packageJson": false
-      }
-    ]
+  "gasdev": {
+    "release": {
+      "targets": [
+        {
+          "branch": "dist",
+          "hide": ["**/types/*.js", "shared/*.js"],
+          "exclude": ["web/"]
+        },
+        {
+          "branch": "dist-web",
+          "from": "dist/web",
+          "hide": ["**/types/*.js"],
+          "include": [
+            { "from": "dist/shared", "to": "shared", "hide": ["*.js"] }
+          ],
+          "files": [
+            "src/web/README.md:README.md",
+            "LICENSE.md",
+            "CHANGELOG.md"
+          ],
+          "packageJson": false
+        }
+      ]
+    }
   }
 }
 ```
@@ -921,7 +930,7 @@ The workflow is referenced by an exact tag (`@v3.0.0`) and the CLI by a semver r
 
 #### Setup
 
-Steps 1-4 are done once per repository, steps 5-8 once per environment (`dev`, `live`), and steps 9-10 once.
+Step 1 is done once per Google account, steps 2-4 once per repository, steps 5-8 once per environment (`dev`, `live`), and steps 9-10 once.
 
 ##### 1. Enable the Apps Script API
 
@@ -931,9 +940,9 @@ Enable the [Apps Script API](https://script.google.com/home/usersettings) for th
 
 See [Requirements and install](#requirements-and-install).
 
-##### 3. Commit `.clasp.example.json`
+##### 3. Commit the clasp and manifest templates
 
-Commit `.clasp.example.json` at the project root. It is the base of `.clasp.json`, without `scriptId`. The optional `rootDir` (relative, no `..`) is where the build writes `appsscript.json`:
+Commit `.clasp.example.json` and `appsscript.example.json` at the project root; the [setup wizard](#configuration-3) requires both. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
 
 ```json
 { "rootDir": "dist" }
@@ -1388,15 +1397,15 @@ Exit codes: `0` in sync (or fixed), `1` drift or failure, `2` usage error. Rules
 ## Migrating an existing project
 
 1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) to `devDependencies` (see [Requirements](#requirements) and [Install](#install)).
-2. Set `"prettier": "gasdev/prettier"` in `package.json` and delete `.prettierrc.json`.
-3. Replace the options of `tsconfig.json` and `tsconfig.test.json` with an `extends` of the matching preset, keeping `rootDir`, `outDir` and `include` local (see [TypeScript](#typescript)).
-4. Replace `eslint.config.js` with `gasEslint(...)` (see [ESLint](#eslint)).
-5. Remove `@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` from `devDependencies`.
-6. Run `npx gasdev init` to add `.github/dependabot.yml`, the ignore lines and the missing required scripts.
+2. Run `npm install`.
+3. Set `"prettier": "gasdev/prettier"` in `package.json` and delete `.prettierrc.json`.
+4. Replace the options of `tsconfig.json` and `tsconfig.test.json` with an `extends` of the matching preset, keeping `rootDir`, `outDir` and `include` local (see [TypeScript](#typescript)).
+5. Replace `eslint.config.js` with `gasEslint(...)` (see [ESLint](#eslint)).
+6. Remove `@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` from `devDependencies`.
 7. For plain JavaScript tooling, add `"gasdev": { "preset": "node" }` to `package.json`.
-8. Add `gasdev check` to the `check` script (if `init` added it, this is already done) and align the scripts `init` did not change with what the check reports.
-9. Run `npm install`.
-10. Run `npm run check`. It must pass with no source changes: `prettier --check`, `eslint` and `tsc` are clean.
+8. Run `npx gasdev init` to add `.github/dependabot.yml`, the ignore lines and the missing required scripts.
+9. Add `gasdev check` to the `check` script (if `init` added it, this is already done) and align the scripts `init` did not change with what the check reports.
+10. Run `npm install` to prune the removed dependencies, then `npm run check`. It must pass with no source changes: `prettier --check`, `eslint` and `tsc` are clean.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
