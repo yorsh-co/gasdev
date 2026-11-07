@@ -131,7 +131,7 @@ Add it to your project's `package.json` as a dev dependency, pinned to a release
 
 For a new project:
 
-1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) as dev dependencies (see [Install](#install)).
+1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) as dev dependencies (see [Requirements](#requirements) and [Install](#install)).
 2. Run `npx gasdev init` to create the ignore files, `.github/dependabot.yml` and the missing required scripts.
 3. Add the config `init` does not create: [Prettier](#prettier), [TypeScript](#typescript) and [ESLint](#eslint). Add the `build`, `build:watch` and `typecheck` scripts, which `init` only expects to exist, and `rimraf` as a dev dependency for the `clean` script.
 4. Run `npm install`, then `npm run check`.
@@ -1387,7 +1387,7 @@ Exit codes: `0` in sync (or fixed), `1` drift or failure, `2` usage error. Rules
 
 ## Migrating an existing project
 
-1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) to `devDependencies` (see [Install](#install)).
+1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) to `devDependencies` (see [Requirements](#requirements) and [Install](#install)).
 2. Set `"prettier": "gasdev/prettier"` in `package.json` and delete `.prettierrc.json`.
 3. Replace the options of `tsconfig.json` and `tsconfig.test.json` with an `extends` of the matching preset, keeping `rootDir`, `outDir` and `include` local (see [TypeScript](#typescript)).
 4. Replace `eslint.config.js` with `gasEslint(...)` (see [ESLint](#eslint)).
