@@ -1442,6 +1442,8 @@ Add `@google/clasp` as a dev dependency where you run clasp (`gasdev gas-test ru
 
 Inner shapes are unchanged. `gasdev check` verifies that each key is an object.
 
+A `package.json` that still has an old key is rejected with `package.json: "<old>" is no longer supported; move it to "<new>" (see the README section "Migrating to 3.0").`
+
 ### Imports and config references
 
 - `gas-dev-config/*` becomes `gasdev/*` in `prettier`, the ESLint import and the tsconfig `extends` (for example `gasdev/tsconfig/gas.json`).
