@@ -575,8 +575,6 @@ gasdev html [--check]
 2. Commit the generated file: tests, Apps Script tests and type-checking load it from `loadOrder`.
 3. `npm run check` fails with drift when it is stale, because `gasdev check` is part of it. No script of the project is required by this feature.
 
-<a id="bundle"></a>
-
 ### Bundle
 
 `gasdev bundle` bundles gas-\* libraries from their `dist/vX.Y.Z` tags into one global script file, in an Apps Script project that uses several libraries.
