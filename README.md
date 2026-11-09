@@ -1142,7 +1142,7 @@ The release requirement for these rulesets is stated under [GitHub Release](#git
 
 <a id="requirements-and-install"></a>
 
-### Requirements
+### Deploy requirements
 
 - A project with `npm run check` and `npm run build` scripts (or custom commands, see [Workflow inputs](#workflow-inputs-and-outputs)) and a built `<rootDir>/appsscript.json`
 - A GitHub environment per target, with the secret and variables below
