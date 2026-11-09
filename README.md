@@ -664,7 +664,7 @@ Run `npm run test:gas:build`, paste the generated file into the Apps Script edit
 
 ### HTML build
 
-Use `gasdev html` in a library that ships an HtmlService UI. You edit the UI as `.html`, `.css` and TypeScript files. Apps Script serves HtmlService pages from strings or `.html` files, but gasdev's test loader, bundle and release handle `.ts` sources in `loadOrder`. So `gasdev html` inlines the page and writes it as one `.ts` file that declares the whole page as one string constant, listed in `loadOrder` like any other source.
+Use `gasdev html` in a library that ships an HtmlService UI. You edit the UI as `.html`, `.css` and TypeScript files. Apps Script serves HtmlService pages from strings or `.html` files, but gasdev's test loader and `gasdev release` handle `.ts` sources in `loadOrder`, and `gasdev bundle` and git subtree consume the compiled `.js`. So `gasdev html` inlines the page and writes it as a `.ts` file that declares the whole page as one string constant, listed in `loadOrder` like any other source.
 
 #### Configuration
 
@@ -998,7 +998,7 @@ Configuration is optional and lives under the `release` key of `gasdev` in your 
 
 ##### GitHub Release
 
-The tool does not push `vX.Y.Z`; push it yourself (`git push <remote> vX.Y.Z`) before releasing. The remote must be a `github.com` repository; an SSH host alias for github.com (such as `github:owner/repo.git` with a `Host github` entry in `~/.ssh/config`) is resolved with `ssh -G`.
+`gasdev release` does not push `vX.Y.Z`; push it yourself (`git push <remote> vX.Y.Z`) before releasing. The remote must be a `github.com` repository; an SSH host alias for github.com (such as `github:owner/repo.git` with a `Host github` entry in `~/.ssh/config`) is resolved with `ssh -G`.
 
 - **Notes**: the `## [X.Y.Z]` section of `CHANGELOG.md` (`[vX.Y.Z]` is also accepted). If there is none, the tag annotation is used, and otherwise the title `vX.Y.Z`.
 - **Auth**: `gh auth login` locally, or `GH_TOKEN`/`GITHUB_TOKEN` in CI.
@@ -1139,6 +1139,8 @@ The release requirement for these rulesets is stated under [GitHub Release](#git
 ## Deploy a web app
 
 `gasdev setup` creates the Apps Script project and the first web app deployment interactively. `gasdev deploy` then pushes and redeploys from GitHub Actions through the reusable `gas-deploy` workflow. Both use the clasp in the project's `node_modules`.
+
+<a id="requirements-and-install"></a>
 
 ### Requirements
 
@@ -1452,6 +1454,8 @@ If the OAuth scopes in the built `appsscript.json` differ from those of the depl
 3. Re-run the workflow.
 
 The check compares only the explicit `oauthScopes` in `appsscript.json`. A project that relies on automatic scope detection (no `oauthScopes` key) always passes the check, so web-app projects should declare `oauthScopes` explicitly.
+
+<a id="deploy-cli-reference"></a>
 
 ### Command reference
 
