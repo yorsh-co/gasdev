@@ -84,14 +84,38 @@ The expected value of each required script is listed under [What is checked](../
 
 ## 5. Config files and imports
 
-| File                                                            | Before                                               | After                                        |
-| --------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------- |
-| `tsconfig.json`, `tsconfig.test.json`, `gas-test/tsconfig.json` | `"extends": "gas-dev-config/tsconfig/<preset>.json"` | `"extends": "gasdev/tsconfig/<preset>.json"` |
-| `eslint.config.js`                                              | `from 'gas-dev-config/eslint'`                       | `from 'gasdev/eslint'`                       |
-| Code that imports the bundler                                   | `gas-dev-bundle`                                     | `gasdev/bundle`                              |
-| Code that imports the deploy API                                | `gas-dev-ci`                                         | `gasdev/ci`                                  |
+Config files and source code still reference the old packages, which `npm install` removed in [step 2](#2-dependencies). Until they are updated, `tsc` and `eslint` fail to resolve them. List them:
 
-The `prettier` key is covered in [step 3](#3-packagejson-keys).
+```sh
+grep -rnE "gas-dev-(config|bundle|ci)" --exclude-dir={node_modules,.git} --exclude={package-lock.json,CHANGELOG.md} .
+```
+
+Then, in each file it lists, replace the package name in the module specifier and keep the rest of the path:
+
+| Before                    | After             | Where                                                                           |
+| ------------------------- | ----------------- | ------------------------------------------------------------------------------- |
+| `gas-dev-config/tsconfig` | `gasdev/tsconfig` | `extends` in `tsconfig.json`, `tsconfig.test.json` and `gas-test/tsconfig.json` |
+| `gas-dev-config/eslint`   | `gasdev/eslint`   | the import in `eslint.config.js`                                                |
+| `gas-dev-bundle`          | `gasdev/bundle`   | code that imports the bundler                                                   |
+| `gas-dev-ci`              | `gasdev/ci`       | code that imports the deploy API                                                |
+
+For example:
+
+```diff
+ // tsconfig.json
+-"extends": "gas-dev-config/tsconfig/gas.json",
++"extends": "gasdev/tsconfig/gas.json",
+
+ // gas-test/tsconfig.json
+-"extends": "gas-dev-config/tsconfig/gas-test.json",
++"extends": "gasdev/tsconfig/gas-test.json",
+
+ // eslint.config.js
+-import { gasEslint } from 'gas-dev-config/eslint';
++import { gasEslint } from 'gasdev/eslint';
+```
+
+The preset file name (`gas.json`, `test.json`, `gas-test.json`, `node.json` or `web.json`) stays the same. The `prettier` key is covered in [step 3](#3-packagejson-keys).
 
 ## 6. Generated files
 
