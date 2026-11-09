@@ -396,7 +396,7 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
 - `release` configures [Release configuration](#release-configuration).
   - Validated by `gasdev release`, not by `check`: an object with the keys `remote`, `targets` and `githubRelease`; `targets` is optional (default: one `dist` target); when given, a non-empty list with unique branches.
   - Unknown keys in `gasdev.release`, in a target or in an `include` entry are rejected, naming the key path (for example `gasdev.release.targets[1].pakageJson is not a known option`).
-- `ci` configures the [setup wizard](#configuration-3).
+- `ci` configures the [setup wizard](#wizard-configuration).
   - Validated by `gasdev setup`, not by `check`: an object with the keys `title` and `steps`; any other key is rejected.
 - `loadOrder`, `peers`, `gasTest` and `html` with the `node` preset are an error.
 
@@ -1138,26 +1138,24 @@ The release requirement for these rulesets is stated under [GitHub Release](#git
 
 ## Deploy a web app
 
-Setup and CI deployment for Google Apps Script projects: a guided `gasdev setup` wizard, a reusable GitHub Actions workflow and a `gasdev deploy` CLI that push with clasp and redeploy web apps. Both commands use the same clasp, resolved from the project's `node_modules`.
+`gasdev setup` creates the Apps Script project and the first web app deployment interactively. `gasdev deploy` then pushes and redeploys from GitHub Actions through the reusable `gas-deploy` workflow. Both use the clasp in the project's `node_modules`.
 
-### Requirements and install
+### Requirements
 
 - A project with `npm run check` and `npm run build` scripts (or custom commands, see [Workflow inputs](#workflow-inputs-and-outputs)) and a built `<rootDir>/appsscript.json`
 - A GitHub environment per target, with the secret and variables below
 - The Apps Script API enabled at https://script.google.com/home/usersettings
 - `@google/clasp` as a dev dependency (see [Requirements](#requirements))
 
-The workflow runs the CLI with `npx --no-install`, so a missing dependency fails instead of fetching an unrelated package. Add a script for the wizard:
+The workflow runs `gasdev` with `npx --no-install`, so a missing dependency fails instead of fetching an unrelated package. Add a script for the wizard:
 
 ```json
 { "scripts": { "deploy:setup": "gasdev setup" } }
 ```
 
-The workflow is referenced by an exact tag (`@v3.0.0`) and the CLI by a semver range (`#semver:^3.0.0`). They are fetched separately: the workflow definition by GitHub when the job starts, the CLI by `npm ci` from your lockfile. Keep them on the same version.
+The workflow is referenced by an exact tag (`@v3.0.0`) and `gasdev` by a semver range (`#semver:^3.0.0`). They are fetched separately: the workflow definition by GitHub when the job starts, `gasdev` by `npm ci` from your lockfile. Keep them on the same version.
 
 ### Setup
-
-Install the CLI first (see [Requirements and install](#requirements-and-install)).
 
 Step 1 is done once per Google account, steps 2-3 once per repository, steps 4-7 once per environment (`dev`, `live`), and steps 8-9 once.
 
@@ -1167,13 +1165,13 @@ Enable the [Apps Script API](https://script.google.com/home/usersettings) for th
 
 #### 2. Commit the clasp and manifest templates
 
-Commit `.clasp.example.json` and `appsscript.example.json` at the project root; the [setup wizard](#configuration-3) requires both. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
+Commit `.clasp.example.json` and `appsscript.example.json` at the project root; the [setup wizard](#wizard-configuration) requires both. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
 
 ```json
 { "rootDir": "dist" }
 ```
 
-Add `.clasp.json` to `.gitignore`: the CLI overwrites it from the template plus `GAS_SCRIPT_ID`.
+Add `.clasp.json` to `.gitignore`: `gasdev` overwrites it from the template plus `GAS_SCRIPT_ID`.
 
 #### 3. Provide `check` and `build`
 
@@ -1262,12 +1260,9 @@ The wizard runs these steps in order:
 | `2`   | Invalid usage     |
 | `130` | Cancelled         |
 
-#### Configuration
+#### Wizard configuration
 
-Two templates are required at the project root:
-
-- `.clasp.example.json`: the base of `.clasp.json`. Its optional `rootDir` (default `.`) is where the manifest is written.
-- `appsscript.example.json`: the base of the manifest.
+The two required templates are described in [step 2](#2-commit-the-clasp-and-manifest-templates).
 
 Options live in `package.json` under `gasdev.ci`:
 
@@ -1458,7 +1453,7 @@ If the OAuth scopes in the built `appsscript.json` differ from those of the depl
 
 The check compares only the explicit `oauthScopes` in `appsscript.json`. A project that relies on automatic scope detection (no `oauthScopes` key) always passes the check, so web-app projects should declare `oauthScopes` explicitly.
 
-### Deploy CLI reference
+### Command reference
 
 ```sh
 gasdev setup
