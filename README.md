@@ -1503,7 +1503,7 @@ gasdev deploy
 ## Migrating to 3.0
 
 3.0 merges `gas-dev-config`, `gas-dev-bundle`, `gas-dev-release` and `gas-dev-ci` into one package named `gasdev`. A `package.json` that still has an old key is rejected with an error that points here.
-See [the migration guide](docs/migrating-to-3.0.md) for the dependency, script, key, import and workflow changes.
+See [the migration guide](docs/migrating-to-3.0.md) for the dependency, script, key, import and workflow changes. Each step is a manual edit; `init` and `check --fix` do not rewrite existing entries.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
