@@ -9,7 +9,7 @@
 
 - [About gasdev](#about-gasdev)
   - [Features](#features)
-  - [How the tools fit together](#gasdev-tools)
+  - [How it works](#how-it-works)
   - [Key terms](#key-terms)
 - [Getting started](#getting-started)
   - [Requirements](#requirements)
@@ -53,7 +53,7 @@
 ### Features
 
 - One shared [Prettier config](#prettier), five [TypeScript presets](#typescript) and one [ESLint factory](#eslint), rolled out by a version bump
-- Uses each tool's own extension mechanism instead of copied files, see [Shared configs](#shared-configs)
+- Prettier, TypeScript and ESLint configs are shared through their own extension mechanisms instead of copied files, see [Shared configs](#shared-configs)
 - [ESLint](#eslint) `gas` preset for Apps Script TypeScript, with a `web` option and a `node` preset for plain JavaScript
 - [`gasdev check`](#config-check) reports drift in ignore files, Dependabot config and standard scripts
 - [`gasdev init`](#config-check) scaffolds a new project without overwriting anything
@@ -71,31 +71,32 @@
 
 <a id="the-gasdev-tools"></a>
 
-### How the tools fit together
+### How it works
 
-A library uses `gasdev` for presets and `release`; a project consuming several libraries uses `gasdev bundle` (a single library can be added with `git subtree` instead); a project that deploys a web app uses `gasdev setup` and `gasdev deploy`.
+gasdev is a single dev dependency whose `gasdev` command covers the life of three kinds of Apps Script project:
 
-The tools are connected by one piece of metadata, declared once in the library:
+- **Library** (for example `gas-lock`): shared configs, `check`, tests, `gas-test`, `html`, `peers sync`, `release` and `github`.
+- **App that uses libraries**: `bundle`, or `git subtree` for a single library.
+- **Web app**: `setup` once, then `deploy` from CI through the reusable workflow.
 
-```text
-library package.json     dist/vX.Y.Z package.json     consumer project
-"gasdev": {              "gasLibrary": {              src/lib/gas-libraries.js
-  "loadOrder": [...],  ──►  "loadOrder": [...],  ──►    (libraries and their files
-  "peers": {...}            "peers": {...}               in load order)
-}                        }
-validated by             written by                   written by
-gasdev check             gasdev release               gasdev bundle
+```mermaid
+flowchart LR
+  lib["gas-lock repo<br>main, tag v1.2.0"]
+  dist["dist branch<br>tag dist/v1.2.0"]
+  app["your-app/src/lib/<br>gas-libraries.js"]
+  web["Apps Script<br>web app"]
+  lib -->|"gasdev release"| dist
+  dist -->|"gasdev bundle"| app
+  app -->|"gasdev deploy (CI)"| web
 ```
 
-`gasdev gas-test build` uses the same bundler as `gasdev bundle` to bundle a library's peers ahead of the library under test.
-
-A library release therefore runs: `npm run check` (presets, tests and `gasdev check`), `npm run test:gas` on the git-flow release branch (Apps Script tests, manual), then `npm run build:release` (build, then `gasdev release`).
+The connection is metadata: `loadOrder` in gas-lock's `gasdev` key becomes `gasLibrary.loadOrder` in the `package.json` on `dist/v1.2.0`, and `gasdev bundle` reads it to order the files. See [Library metadata](#library-metadata) and [Load order and peers](#load-order-and-peers).
 
 ### Key terms
 
 - **Apps Script global scope**: the files of an Apps Script project share one scope and have no `import` or `export`, so a top-level name in one file is visible in all the others.
 - **Load order**: the order in which Apps Script runs the files. A file that uses a name from another file must come after it. It is the `loadOrder` list in the `gasdev` key.
-- **gas-\* library**: a reusable Apps Script library that is published with `gasdev release` and consumed with `gasdev bundle`.
+- **gas-\* library**: a reusable Apps Script library published to a dist branch with `gasdev release` and consumed with `gasdev bundle`.
 - **Peer library**: an optional gas-\* library that another library uses when it is present. It is declared under `peers` with a version range.
 - **Dist branch**: the branch that `gasdev release` pushes the compiled output to (default `dist`).
 - **Git-flow release branch**: the `release/X.Y.Z` branch where a version is prepared before it is merged and tagged. It is not the dist branch.
@@ -136,7 +137,7 @@ Add it to your project's `package.json` as a dev dependency, using a semver rang
 }
 ```
 
-`@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` are dependencies of `gasdev`. Remove them from your own `devDependencies`.
+`@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` are dependencies of `gasdev`, so a new project does not add them to its own `devDependencies`.
 
 ### Quick start
 
@@ -165,8 +166,6 @@ Use the shared Prettier config in every project, by pointing the `prettier` key 
 ```
 
 The config is `{ "singleQuote": true }`; every other option is a Prettier 3 default.
-
-Delete `.prettierrc.json`. A `prettier` key in `package.json` takes precedence over `.prettierrc.json`, so a leftover file was already being ignored.
 
 ### TypeScript
 
@@ -363,7 +362,7 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
 }
 ```
 
-`loadOrder`, `peers`, `gasTest` and `html` are also read from `gasdev`, for the `gas` preset only. `bundle`, `release` and `ci` are accepted with either preset; `gasdev check` only checks that they are objects, and their own tools validate them as described below. Any other key or preset value is an error.
+`loadOrder`, `peers`, `gasTest` and `html` are also read from `gasdev`, for the `gas` preset only. `bundle`, `release` and `ci` are accepted with either preset; `gasdev check` only checks that they are objects, and the commands that use them validate them (`gasdev bundle`, `gasdev release`, `gasdev setup`) as described below. Any other key or preset value is an error.
 
 ```json
 {
@@ -397,7 +396,7 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
 - `release` configures [Release configuration](#release-configuration).
   - Validated by `gasdev release`, not by `check`: an object with the keys `remote`, `targets` and `githubRelease`; `targets` is optional (default: one `dist` target); when given, a non-empty list with unique branches.
   - Unknown keys in `gasdev.release`, in a target or in an `include` entry are rejected, naming the key path (for example `gasdev.release.targets[1].pakageJson is not a known option`).
-- `ci` configures the [setup wizard](#configuration-3).
+- `ci` configures the [setup wizard](#wizard-configuration).
   - Validated by `gasdev setup`, not by `check`: an object with the keys `title` and `steps`; any other key is rejected.
 - `loadOrder`, `peers`, `gasTest` and `html` with the `node` preset are an error.
 
@@ -665,7 +664,7 @@ Run `npm run test:gas:build`, paste the generated file into the Apps Script edit
 
 ### HTML build
 
-Use `gasdev html` in a library that ships an HtmlService UI. You edit the UI as `.html`, `.css` and TypeScript files, but Apps Script needs it as source files that `gasdev bundle` (`.js` only), git subtree, the Vitest loader and `gasdev release` already handle. The command inlines the page and writes it as a `.ts` file that declares the whole page as one string constant, listed in `loadOrder` like any other source.
+Use `gasdev html` in a library that ships an HtmlService UI. You edit the UI as `.html`, `.css` and TypeScript files. Apps Script serves HtmlService pages from strings or `.html` files, but gasdev's test loader and `gasdev release` handle `.ts` sources in `loadOrder`, and `gasdev bundle` and git subtree consume the compiled `.js`. So `gasdev html` inlines the page and writes it as a `.ts` file that declares the whole page as one string constant, listed in `loadOrder` like any other source.
 
 #### Configuration
 
@@ -748,7 +747,8 @@ Use `gasdev bundle` in an Apps Script project that uses several libraries: it bu
 - Orders libraries by their declared load order, with peers before the libraries that use them
 - Reproducible output: no timestamps, and a header recording each library's version and full commit SHA
 - Validates the bundle with `node --check` before writing anything; optional concatenated `.d.ts` file for the libraries' global declarations
-- Libraries must be released with `gasdev release` and `gasdev.loadOrder`, so each tag carries `gasLibrary` metadata; git must reach the libraries' repositories
+
+Requirements: libraries released with `gasdev release` and `loadOrder`, so each tag carries `gasLibrary` metadata; git access to the libraries' repositories.
 
 #### Configuration
 
@@ -793,7 +793,7 @@ Configure the libraries in the project's `package.json`, then run `gasdev bundle
 
 #### How versions are resolved
 
-For each library the tool runs `git ls-remote --tags --refs <repository> 'refs/tags/dist/v*'`, parses the `dist/vX.Y.Z` tags (tags that are not valid semver are ignored) and picks `semver.maxSatisfying` for the range. If nothing matches, the error names the library, the range and the available versions. The chosen tag is fetched with a shallow clone and its commit SHA is recorded in the bundle header. Prereleases are only considered when the range itself names one.
+For each library `gasdev bundle` runs `git ls-remote --tags --refs <repository> 'refs/tags/dist/v*'`, parses the `dist/vX.Y.Z` tags (tags that are not valid semver are ignored) and picks `semver.maxSatisfying` for the range. If nothing matches, the error names the library, the range and the available versions. The chosen tag is fetched with a shallow clone and its commit SHA is recorded in the bundle header. Prereleases are only considered when the range itself names one.
 
 #### Load order and peers
 
@@ -875,7 +875,7 @@ Use `gasdev peers sync [--check]` in a library with peers: it keeps `src/interna
 
 Use `gasdev release` to publish the build of a gas-\* library to its [dist branch](#key-terms)(es) with tags, so consumers can `git subtree` the compiled output without any TypeScript or ESLint tooling.
 
-- Zero configuration for single-target libraries; multi-target projects (for example a backend branch plus a web client branch) are configuration, not a fork
+- Zero configuration for single-target libraries; multi-target projects (for example a backend branch plus a web client branch) are configured per target
 - Multi-target releases are all-or-nothing: every branch and tag is pushed in a single atomic `git push`
 - Targets without changes are skipped with a notice and get no commit or tag
 - Consistent `v`-prefixed tags: version tags `vX.Y.Z`, release tags `<branch>/vX.Y.Z`
@@ -883,7 +883,9 @@ Use `gasdev release` to publish the build of a gas-\* library to its [dist branc
 - Never ships `*.types.js` (by default) and removes stale or hidden files already on the dist branch
 - Generates a trimmed `package.json` for the dist branch
 - `--dry-run` shows the staged diff per target and restores the worktrees; `--target` releases a subset
-- Strict configuration validation: unknown keys fail with the offending key path
+- Unknown configuration keys fail with the offending key path (see [The gasdev key](#the-gasdev-key))
+
+A release runs in three steps: `npm run check` (presets, tests and `gasdev check`), `npm run test:gas` on the git-flow release branch (Apps Script tests, manual), then `npm run build:release` (build, then `gasdev release`).
 
 Requirements:
 
@@ -942,7 +944,7 @@ npm run release                            # release
 Run it from the released commit, after `git flow release finish` and the build:
 
 1. **Preflight**, before anything is modified. It checks that:
-   - the working tree is clean (the tool's own `.worktrees/` is ignored)
+   - the working tree is clean (`gasdev`'s own `.worktrees/` is ignored)
    - `vX.Y.Z` exists and points at `HEAD`
    - the `@version` header of `peer/<name>.peer.types.d.ts` (when that file exists) equals `package.json`'s `version`
    - every target's build directory contains a `.js` file
@@ -996,7 +998,7 @@ Configuration is optional and lives under the `release` key of `gasdev` in your 
 
 ##### GitHub Release
 
-The tool does not push `vX.Y.Z`; push it yourself (`git push <remote> vX.Y.Z`) before releasing. The remote must be a `github.com` repository; an SSH host alias for github.com (such as `github:owner/repo.git` with a `Host github` entry in `~/.ssh/config`) is resolved with `ssh -G`.
+`gasdev release` does not push `vX.Y.Z`; push it yourself (`git push <remote> vX.Y.Z`) before releasing. The remote must be a `github.com` repository; an SSH host alias for github.com (such as `github:owner/repo.git` with a `Host github` entry in `~/.ssh/config`) is resolved with `ssh -G`.
 
 - **Notes**: the `## [X.Y.Z]` section of `CHANGELOG.md` (`[vX.Y.Z]` is also accepted). If there is none, the tag annotation is used, and otherwise the title `vX.Y.Z`.
 - **Auth**: `gh auth login` locally, or `GH_TOKEN`/`GITHUB_TOKEN` in CI.
@@ -1104,7 +1106,7 @@ If the final push is rejected, nothing reached the remote, but the local release
 
 Because the push is atomic, a multi-target release is never left half-published.
 
-If `githubRelease` is on and the push succeeded but the GitHub Release could not be created, the tool exits `3`. The push is kept and nothing is rolled back. The notes are written to `.worktrees/github-release-vX.Y.Z.md`, and the error message prints the exact command to retry from the project root:
+If `githubRelease` is on and the push succeeded but the GitHub Release could not be created, `gasdev release` exits `3`. The push is kept and nothing is rolled back. The notes are written to `.worktrees/github-release-vX.Y.Z.md`, and the error message prints the exact command to retry from the project root:
 
 ```bash
 gh release create vX.Y.Z -R owner/repo --verify-tag --title vX.Y.Z --notes-file .worktrees/github-release-vX.Y.Z.md
@@ -1136,26 +1138,26 @@ The release requirement for these rulesets is stated under [GitHub Release](#git
 
 ## Deploy a web app
 
-Setup and CI deployment for Google Apps Script projects: a guided `gasdev setup` wizard, a reusable GitHub Actions workflow and a `gasdev deploy` CLI that push with clasp and redeploy web apps. Both commands use the same clasp, resolved from the project's `node_modules`.
+`gasdev setup` creates the Apps Script project and the first web app deployment interactively. `gasdev deploy` then pushes and redeploys from GitHub Actions through the reusable `gas-deploy` workflow. Both use the clasp in the project's `node_modules`.
 
-### Requirements and install
+<a id="requirements-and-install"></a>
+
+### Deploy requirements
 
 - A project with `npm run check` and `npm run build` scripts (or custom commands, see [Workflow inputs](#workflow-inputs-and-outputs)) and a built `<rootDir>/appsscript.json`
 - A GitHub environment per target, with the secret and variables below
 - The Apps Script API enabled at https://script.google.com/home/usersettings
 - `@google/clasp` as a dev dependency (see [Requirements](#requirements))
 
-The workflow runs the CLI with `npx --no-install`, so a missing dependency fails instead of fetching an unrelated package. Add a script for the wizard:
+The workflow runs `gasdev` with `npx --no-install`, so a missing dependency fails instead of fetching an unrelated package. Add a script for the wizard:
 
 ```json
 { "scripts": { "deploy:setup": "gasdev setup" } }
 ```
 
-The workflow is referenced by an exact tag (`@v3.0.0`) and the CLI by a semver range (`#semver:^3.0.0`). They are fetched separately: the workflow definition by GitHub when the job starts, the CLI by `npm ci` from your lockfile. Keep them on the same version.
+The workflow is referenced by an exact tag (`@v3.0.0`) and `gasdev` by a semver range (`#semver:^3.0.0`). They are fetched separately: the workflow definition by GitHub when the job starts, `gasdev` by `npm ci` from your lockfile. Keep them on the same version.
 
 ### Setup
-
-Install the CLI first (see [Requirements and install](#requirements-and-install)).
 
 Step 1 is done once per Google account, steps 2-3 once per repository, steps 4-7 once per environment (`dev`, `live`), and steps 8-9 once.
 
@@ -1165,13 +1167,13 @@ Enable the [Apps Script API](https://script.google.com/home/usersettings) for th
 
 #### 2. Commit the clasp and manifest templates
 
-Commit `.clasp.example.json` and `appsscript.example.json` at the project root; the [setup wizard](#configuration-3) requires both. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
+Commit `.clasp.example.json` and `appsscript.example.json` at the project root; the [setup wizard](#wizard-configuration) requires both. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
 
 ```json
 { "rootDir": "dist" }
 ```
 
-Add `.clasp.json` to `.gitignore`: the CLI overwrites it from the template plus `GAS_SCRIPT_ID`.
+Add `.clasp.json` to `.gitignore`: `gasdev` overwrites it from the template plus `GAS_SCRIPT_ID`.
 
 #### 3. Provide `check` and `build`
 
@@ -1260,12 +1262,9 @@ The wizard runs these steps in order:
 | `2`   | Invalid usage     |
 | `130` | Cancelled         |
 
-#### Configuration
+#### Wizard configuration
 
-Two templates are required at the project root:
-
-- `.clasp.example.json`: the base of `.clasp.json`. Its optional `rootDir` (default `.`) is where the manifest is written.
-- `appsscript.example.json`: the base of the manifest.
+The two required templates are described in [step 2](#2-commit-the-clasp-and-manifest-templates).
 
 Options live in `package.json` under `gasdev.ci`:
 
@@ -1456,7 +1455,9 @@ If the OAuth scopes in the built `appsscript.json` differ from those of the depl
 
 The check compares only the explicit `oauthScopes` in `appsscript.json`. A project that relies on automatic scope detection (no `oauthScopes` key) always passes the check, so web-app projects should declare `oauthScopes` explicitly.
 
-### Deploy CLI reference
+<a id="deploy-cli-reference"></a>
+
+### Command reference
 
 ```sh
 gasdev setup
@@ -1488,7 +1489,7 @@ gasdev deploy
 
 1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) to `devDependencies` (see [Requirements](#requirements) and [Install](#install)).
 2. Run `npm install`.
-3. Set `"prettier": "gasdev/prettier"` in `package.json` and delete `.prettierrc.json`.
+3. Set `"prettier": "gasdev/prettier"` in `package.json` and delete `.prettierrc.json` (the `prettier` key takes precedence over `.prettierrc.json`).
 4. Replace the options of `tsconfig.json` and `tsconfig.test.json` with an `extends` of the matching preset, keeping `rootDir`, `outDir` and `include` local (see [TypeScript](#typescript)).
 5. Replace `eslint.config.js` with `gasEslint(...)` (see [ESLint](#eslint)).
 6. Remove `@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` from `devDependencies`.
@@ -1522,7 +1523,7 @@ Run `npm run check` before opening a pull request. It runs the format check, lin
 
 MIT
 
-See the `LICENSE` file for details.
+See the [`LICENSE.md`](LICENSE.md) file for details.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
