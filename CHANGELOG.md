@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- The 3.0 migration guide lists every manual edit in order, including all tsconfig files, `eslint.config.js`, `engines.node` and generated files, and ends with a check
 - `gasdev github` reports non-JSON gh output as an error instead of crashing
 - README lists `gasdev setup` and `gasdev deploy`, not only `gasdev gas-test run`, as needing `@google/clasp`
 - README documents the `bundle`, `release` and `ci` keys under Config check and the legacy-key error under Migrating to 3.0
