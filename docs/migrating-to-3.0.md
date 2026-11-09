@@ -5,7 +5,7 @@
 > [!IMPORTANT]
 > Every step is a manual edit. `gasdev init` and `gasdev check --fix` add missing scripts and ignore lines, but never change an existing script, key or config file. `gasdev check` reports what is left.
 
-Work through the steps in order, then run the [final check](#9-check-the-migration).
+Work through the steps in order, then run the [final check](#10-check-the-migration).
 
 ## 1. Node.js
 
@@ -19,11 +19,15 @@ Remove `gas-dev-config`, `gas-dev-bundle`, `gas-dev-release` and `gas-dev-ci` fr
 "gasdev": "github:yorsh-co/gasdev#semver:^3.0.0"
 ```
 
+Before 3.0.0 is tagged, npm ranges skip prereleases; to test a beta, use `#semver:^3.0.0-beta.N`.
+
 Add `@google/clasp` as a dev dependency where you run clasp (`gasdev gas-test run`, `setup`, `deploy`). It is an optional peer, so libraries that do not use it never install it.
 
 Run `npm install`. Cache paths move to `node_modules/.cache/gasdev`, so delete the old `node_modules/.cache/gas-dev-config` and `node_modules/.cache/gas-dev-bundle` directories.
 
 ## 3. `package.json` keys
+
+Rename whichever of these keys you have:
 
 | Before          | After            |
 | --------------- | ---------------- |
@@ -33,6 +37,12 @@ Run `npm install`. Cache paths move to `node_modules/.cache/gasdev`, so delete t
 | `gasDevCi`      | `gasdev.ci`      |
 
 Inner shapes are unchanged. `gasdev check` verifies that each key is an object.
+
+Code that reads these keys from `package.json` (for example `JSON.parse(readFileSync('package.json')).gasDevConfig`) must read the new paths too; it breaks at runtime, not at typecheck. List it with:
+
+```sh
+grep -rnE "gasDev(Config|Bundle|Release|Ci)" --exclude-dir={node_modules,.git} --exclude={package-lock.json,CHANGELOG.md} .
+```
 
 The old keys sit at the top level; the new ones nest inside the single `gasdev` object. For example:
 
@@ -90,15 +100,15 @@ Config files and source code still reference the old packages, which `npm instal
 grep -rnE "gas-dev-(config|bundle|ci)" --exclude-dir={node_modules,.git} --exclude={package-lock.json,CHANGELOG.md} .
 ```
 
-Then, in each file it lists, replace the package name in the module specifier and keep the rest of the path:
+Then, in each config file and import it lists, replace the package name in the module specifier and keep the rest of the path. Docs and comments are handled in [step 10](#10-check-the-migration):
 
-| Before                    | After             | Where                                                                           |
-| ------------------------- | ----------------- | ------------------------------------------------------------------------------- |
-| `gas-dev-config/tsconfig` | `gasdev/tsconfig` | `extends` in `tsconfig.json`, `tsconfig.test.json` and `gas-test/tsconfig.json` |
-| `gas-dev-config/eslint`   | `gasdev/eslint`   | the import in `eslint.config.js`                                                |
-| `gas-dev-config/test`     | `gasdev/test`     | the test-loader import in Vitest setup or harness files                         |
-| `gas-dev-bundle`          | `gasdev/bundle`   | code that imports the bundler                                                   |
-| `gas-dev-ci`              | `gasdev/ci`       | code that imports the deploy API                                                |
+| Before                    | After             | Where                                                                   |
+| ------------------------- | ----------------- | ----------------------------------------------------------------------- |
+| `gas-dev-config/tsconfig` | `gasdev/tsconfig` | `extends` in every `tsconfig*.json`, including `gas-test/tsconfig.json` |
+| `gas-dev-config/eslint`   | `gasdev/eslint`   | the import in `eslint.config.js`                                        |
+| `gas-dev-config/test`     | `gasdev/test`     | the test-loader import in Vitest setup or harness files                 |
+| `gas-dev-bundle`          | `gasdev/bundle`   | code that imports the bundler                                           |
+| `gas-dev-ci`              | `gasdev/ci`       | code that imports the deploy API                                        |
 
 For example:
 
@@ -143,7 +153,11 @@ The workflow runs `npx --no-install gasdev deploy`, so the web app needs `gasdev
 - `gasdev deploy` prints the clasp it runs (`Using clasp: <path>`), and its errors are prefixed with `gasdev:`, like the other commands.
 - Contributors: the environment variable `GAS_DEV_CONFIG_NETWORK` is now `GASDEV_NETWORK`.
 
-## 9. Check the migration
+## 9. Ignore lines and scripts
+
+Run `npx gasdev check --fix`. It appends the `.gitignore` and `.prettierignore` lines that gasdev 3 requires and you are missing, such as `.claude/plans/` and `.env`. It does not change existing lines or scripts, so fix what it still reports by hand. `gasdev init` adds missing required scripts the same way.
+
+## 10. Check the migration
 
 From the project root:
 
@@ -153,4 +167,4 @@ grep -rnE "gasDev(Config|Bundle|Release|Ci)" --exclude-dir={node_modules,.git} -
 npm run check
 ```
 
-Both `grep`s should print nothing. Comments and docs that still name the old tools count too. `npm run check` must pass, including `gasdev check`. For a library with Apps Script tests, also run `npm run test:gas`.
+Both `grep`s should print nothing. Comments and docs that still name the old tools count too. Rewrite config examples in docs to the nested shape from [step 3](#3-packagejson-keys), not by renaming the key. `npm run check` runs `gasdev check` and must pass. For a library with Apps Script tests, also run `npm run test:gas`.
