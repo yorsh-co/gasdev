@@ -1,6 +1,6 @@
 {
   "name": "gasdev",
-  "version": "3.0.0",
+  "version": "3.0.0-beta.0",
   "private": true,
   "description": "Local development toolkit for Google Apps Script: shared TypeScript, ESLint and Prettier config, testing, builds, releases and CI deployment.",
   "repository": {
