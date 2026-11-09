@@ -96,6 +96,7 @@ Then, in each file it lists, replace the package name in the module specifier an
 | ------------------------- | ----------------- | ------------------------------------------------------------------------------- |
 | `gas-dev-config/tsconfig` | `gasdev/tsconfig` | `extends` in `tsconfig.json`, `tsconfig.test.json` and `gas-test/tsconfig.json` |
 | `gas-dev-config/eslint`   | `gasdev/eslint`   | the import in `eslint.config.js`                                                |
+| `gas-dev-config/test`     | `gasdev/test`     | the test-loader import in Vitest setup or harness files                         |
 | `gas-dev-bundle`          | `gasdev/bundle`   | code that imports the bundler                                                   |
 | `gas-dev-ci`              | `gasdev/ci`       | code that imports the deploy API                                                |
 
@@ -148,7 +149,8 @@ From the project root:
 
 ```sh
 grep -rn "gas-dev" --exclude-dir={node_modules,.git} --exclude={package-lock.json,CHANGELOG.md} .
+grep -rnE "gasDev(Config|Bundle|Release|Ci)" --exclude-dir={node_modules,.git} --exclude={package-lock.json,CHANGELOG.md} .
 npm run check
 ```
 
-The `grep` should print nothing. Comments and docs that still name the old tools count too. `npm run check` must pass, including `gasdev check`. For a library with Apps Script tests, also run `npm run test:gas`.
+Both `grep`s should print nothing. Comments and docs that still name the old tools count too. `npm run check` must pass, including `gasdev check`. For a library with Apps Script tests, also run `npm run test:gas`.
