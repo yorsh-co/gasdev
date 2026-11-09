@@ -137,7 +137,7 @@ Add it to your project's `package.json` as a dev dependency, using a semver rang
 }
 ```
 
-`@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` are dependencies of `gasdev`. Remove them from your own `devDependencies`.
+`@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` are dependencies of `gasdev`, so a new project does not add them to its own `devDependencies`.
 
 ### Quick start
 
@@ -166,8 +166,6 @@ Use the shared Prettier config in every project, by pointing the `prettier` key 
 ```
 
 The config is `{ "singleQuote": true }`; every other option is a Prettier 3 default.
-
-Delete `.prettierrc.json`. A `prettier` key in `package.json` takes precedence over `.prettierrc.json`, so a leftover file was already being ignored.
 
 ### TypeScript
 
@@ -364,7 +362,7 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
 }
 ```
 
-`loadOrder`, `peers`, `gasTest` and `html` are also read from `gasdev`, for the `gas` preset only. `bundle`, `release` and `ci` are accepted with either preset; `gasdev check` only checks that they are objects, and their own tools validate them as described below. Any other key or preset value is an error.
+`loadOrder`, `peers`, `gasTest` and `html` are also read from `gasdev`, for the `gas` preset only. `bundle`, `release` and `ci` are accepted with either preset; `gasdev check` only checks that they are objects, and the commands that use them validate them (`gasdev bundle`, `gasdev release`, `gasdev setup`) as described below. Any other key or preset value is an error.
 
 ```json
 {
@@ -666,7 +664,7 @@ Run `npm run test:gas:build`, paste the generated file into the Apps Script edit
 
 ### HTML build
 
-Use `gasdev html` in a library that ships an HtmlService UI. You edit the UI as `.html`, `.css` and TypeScript files, but Apps Script needs it as source files that `gasdev bundle` (`.js` only), git subtree, the Vitest loader and `gasdev release` already handle. The command inlines the page and writes it as a `.ts` file that declares the whole page as one string constant, listed in `loadOrder` like any other source.
+Use `gasdev html` in a library that ships an HtmlService UI. You edit the UI as `.html`, `.css` and TypeScript files. Apps Script serves HtmlService pages from strings or `.html` files, but gasdev's test loader, bundle and release handle `.ts` sources in `loadOrder`. So `gasdev html` inlines the page and writes it as one `.ts` file that declares the whole page as one string constant, listed in `loadOrder` like any other source.
 
 #### Configuration
 
@@ -749,7 +747,8 @@ Use `gasdev bundle` in an Apps Script project that uses several libraries: it bu
 - Orders libraries by their declared load order, with peers before the libraries that use them
 - Reproducible output: no timestamps, and a header recording each library's version and full commit SHA
 - Validates the bundle with `node --check` before writing anything; optional concatenated `.d.ts` file for the libraries' global declarations
-- Libraries must be released with `gasdev release` and `gasdev.loadOrder`, so each tag carries `gasLibrary` metadata; git must reach the libraries' repositories
+
+Requirements: libraries released with `gasdev release` and `loadOrder`, so each tag carries `gasLibrary` metadata; git access to the libraries' repositories.
 
 #### Configuration
 
@@ -794,7 +793,7 @@ Configure the libraries in the project's `package.json`, then run `gasdev bundle
 
 #### How versions are resolved
 
-For each library the tool runs `git ls-remote --tags --refs <repository> 'refs/tags/dist/v*'`, parses the `dist/vX.Y.Z` tags (tags that are not valid semver are ignored) and picks `semver.maxSatisfying` for the range. If nothing matches, the error names the library, the range and the available versions. The chosen tag is fetched with a shallow clone and its commit SHA is recorded in the bundle header. Prereleases are only considered when the range itself names one.
+For each library `gasdev bundle` runs `git ls-remote --tags --refs <repository> 'refs/tags/dist/v*'`, parses the `dist/vX.Y.Z` tags (tags that are not valid semver are ignored) and picks `semver.maxSatisfying` for the range. If nothing matches, the error names the library, the range and the available versions. The chosen tag is fetched with a shallow clone and its commit SHA is recorded in the bundle header. Prereleases are only considered when the range itself names one.
 
 #### Load order and peers
 
@@ -876,7 +875,7 @@ Use `gasdev peers sync [--check]` in a library with peers: it keeps `src/interna
 
 Use `gasdev release` to publish the build of a gas-\* library to its [dist branch](#key-terms)(es) with tags, so consumers can `git subtree` the compiled output without any TypeScript or ESLint tooling.
 
-- Zero configuration for single-target libraries; multi-target projects (for example a backend branch plus a web client branch) are configuration, not a fork
+- Zero configuration for single-target libraries; multi-target projects (for example a backend branch plus a web client branch) are configured per target
 - Multi-target releases are all-or-nothing: every branch and tag is pushed in a single atomic `git push`
 - Targets without changes are skipped with a notice and get no commit or tag
 - Consistent `v`-prefixed tags: version tags `vX.Y.Z`, release tags `<branch>/vX.Y.Z`
@@ -884,7 +883,7 @@ Use `gasdev release` to publish the build of a gas-\* library to its [dist branc
 - Never ships `*.types.js` (by default) and removes stale or hidden files already on the dist branch
 - Generates a trimmed `package.json` for the dist branch
 - `--dry-run` shows the staged diff per target and restores the worktrees; `--target` releases a subset
-- Strict configuration validation: unknown keys fail with the offending key path
+- Unknown configuration keys fail with the offending key path (see [The gasdev key](#the-gasdev-key))
 
 A release runs in three steps: `npm run check` (presets, tests and `gasdev check`), `npm run test:gas` on the git-flow release branch (Apps Script tests, manual), then `npm run build:release` (build, then `gasdev release`).
 
@@ -945,7 +944,7 @@ npm run release                            # release
 Run it from the released commit, after `git flow release finish` and the build:
 
 1. **Preflight**, before anything is modified. It checks that:
-   - the working tree is clean (the tool's own `.worktrees/` is ignored)
+   - the working tree is clean (`gasdev`'s own `.worktrees/` is ignored)
    - `vX.Y.Z` exists and points at `HEAD`
    - the `@version` header of `peer/<name>.peer.types.d.ts` (when that file exists) equals `package.json`'s `version`
    - every target's build directory contains a `.js` file
@@ -1107,7 +1106,7 @@ If the final push is rejected, nothing reached the remote, but the local release
 
 Because the push is atomic, a multi-target release is never left half-published.
 
-If `githubRelease` is on and the push succeeded but the GitHub Release could not be created, the tool exits `3`. The push is kept and nothing is rolled back. The notes are written to `.worktrees/github-release-vX.Y.Z.md`, and the error message prints the exact command to retry from the project root:
+If `githubRelease` is on and the push succeeded but the GitHub Release could not be created, `gasdev release` exits `3`. The push is kept and nothing is rolled back. The notes are written to `.worktrees/github-release-vX.Y.Z.md`, and the error message prints the exact command to retry from the project root:
 
 ```bash
 gh release create vX.Y.Z -R owner/repo --verify-tag --title vX.Y.Z --notes-file .worktrees/github-release-vX.Y.Z.md
@@ -1491,7 +1490,7 @@ gasdev deploy
 
 1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) to `devDependencies` (see [Requirements](#requirements) and [Install](#install)).
 2. Run `npm install`.
-3. Set `"prettier": "gasdev/prettier"` in `package.json` and delete `.prettierrc.json`.
+3. Set `"prettier": "gasdev/prettier"` in `package.json` and delete `.prettierrc.json` (the `prettier` key takes precedence over `.prettierrc.json`).
 4. Replace the options of `tsconfig.json` and `tsconfig.test.json` with an `extends` of the matching preset, keeping `rootDir`, `outDir` and `include` local (see [TypeScript](#typescript)).
 5. Replace `eslint.config.js` with `gasEslint(...)` (see [ESLint](#eslint)).
 6. Remove `@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` from `devDependencies`.
@@ -1525,7 +1524,7 @@ Run `npm run check` before opening a pull request. It runs the format check, lin
 
 MIT
 
-See the `LICENSE` file for details.
+See the [`LICENSE.md`](LICENSE.md) file for details.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
