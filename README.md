@@ -9,7 +9,7 @@
 
 - [About gasdev](#about-gasdev)
   - [Features](#features)
-  - [How the tools fit together](#gasdev-tools)
+  - [How it works](#how-it-works)
   - [Key terms](#key-terms)
 - [Getting started](#getting-started)
   - [Requirements](#requirements)
@@ -53,7 +53,7 @@
 ### Features
 
 - One shared [Prettier config](#prettier), five [TypeScript presets](#typescript) and one [ESLint factory](#eslint), rolled out by a version bump
-- Uses each tool's own extension mechanism instead of copied files, see [Shared configs](#shared-configs)
+- Prettier, TypeScript and ESLint configs are shared through their own extension mechanisms instead of copied files, see [Shared configs](#shared-configs)
 - [ESLint](#eslint) `gas` preset for Apps Script TypeScript, with a `web` option and a `node` preset for plain JavaScript
 - [`gasdev check`](#config-check) reports drift in ignore files, Dependabot config and standard scripts
 - [`gasdev init`](#config-check) scaffolds a new project without overwriting anything
@@ -71,31 +71,32 @@
 
 <a id="the-gasdev-tools"></a>
 
-### How the tools fit together
+### How it works
 
-A library uses `gasdev` for presets and `release`; a project consuming several libraries uses `gasdev bundle` (a single library can be added with `git subtree` instead); a project that deploys a web app uses `gasdev setup` and `gasdev deploy`.
+gasdev is a single dev dependency whose `gasdev` command covers the life of three kinds of Apps Script project:
 
-The tools are connected by one piece of metadata, declared once in the library:
+- **Library** (for example `gas-lock`): shared configs, `check`, tests, `gas-test`, `html`, `peers sync`, `release` and `github`.
+- **App that uses libraries**: `bundle`, or `git subtree` for a single library.
+- **Web app**: `setup` once, then `deploy` from CI through the reusable workflow.
 
-```text
-library package.json     dist/vX.Y.Z package.json     consumer project
-"gasdev": {              "gasLibrary": {              src/lib/gas-libraries.js
-  "loadOrder": [...],  ──►  "loadOrder": [...],  ──►    (libraries and their files
-  "peers": {...}            "peers": {...}               in load order)
-}                        }
-validated by             written by                   written by
-gasdev check             gasdev release               gasdev bundle
+```mermaid
+flowchart LR
+  lib["gas-lock repo<br>main, tag v1.2.0"]
+  dist["dist branch<br>tag dist/v1.2.0"]
+  app["your-app/src/lib/<br>gas-libraries.js"]
+  web["Apps Script<br>web app"]
+  lib -->|"gasdev release"| dist
+  dist -->|"gasdev bundle"| app
+  app -->|"gasdev deploy (CI)"| web
 ```
 
-`gasdev gas-test build` uses the same bundler as `gasdev bundle` to bundle a library's peers ahead of the library under test.
-
-A library release therefore runs: `npm run check` (presets, tests and `gasdev check`), `npm run test:gas` on the git-flow release branch (Apps Script tests, manual), then `npm run build:release` (build, then `gasdev release`).
+The connection is metadata: `loadOrder` in gas-lock's `gasdev` key becomes `gasLibrary.loadOrder` in the `package.json` on `dist/v1.2.0`, and `gasdev bundle` reads it to order the files. See [Library metadata](#library-metadata) and [Load order and peers](#load-order-and-peers).
 
 ### Key terms
 
 - **Apps Script global scope**: the files of an Apps Script project share one scope and have no `import` or `export`, so a top-level name in one file is visible in all the others.
 - **Load order**: the order in which Apps Script runs the files. A file that uses a name from another file must come after it. It is the `loadOrder` list in the `gasdev` key.
-- **gas-\* library**: a reusable Apps Script library that is published with `gasdev release` and consumed with `gasdev bundle`.
+- **gas-\* library**: a reusable Apps Script library published to a dist branch with `gasdev release` and consumed with `gasdev bundle`.
 - **Peer library**: an optional gas-\* library that another library uses when it is present. It is declared under `peers` with a version range.
 - **Dist branch**: the branch that `gasdev release` pushes the compiled output to (default `dist`).
 - **Git-flow release branch**: the `release/X.Y.Z` branch where a version is prepared before it is merged and tagged. It is not the dist branch.
@@ -884,6 +885,8 @@ Use `gasdev release` to publish the build of a gas-\* library to its [dist branc
 - Generates a trimmed `package.json` for the dist branch
 - `--dry-run` shows the staged diff per target and restores the worktrees; `--target` releases a subset
 - Strict configuration validation: unknown keys fail with the offending key path
+
+A release runs in three steps: `npm run check` (presets, tests and `gasdev check`), `npm run test:gas` on the git-flow release branch (Apps Script tests, manual), then `npm run build:release` (build, then `gasdev release`).
 
 Requirements:
 
