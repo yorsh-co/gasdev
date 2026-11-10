@@ -145,8 +145,8 @@ For a new project:
 
 1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) as dev dependencies (see [Requirements](#requirements) and [Install](#install)), then run `npm install`.
 2. For plain JavaScript tooling, set `"gasdev": { "preset": "node" }` in `package.json`.
-3. Run `npx gasdev init` to create the ignore files, `.github/dependabot.yml` and the missing required scripts.
-4. Add the config `init` does not create: [Prettier](#prettier), [TypeScript](#typescript) and [ESLint](#eslint). Add the `build`, `build:watch` and `typecheck` scripts, which `init` only expects to exist, and `rimraf` as a dev dependency for the `clean` script.
+3. Run `npx gasdev init` to create the ignore files, `.github/dependabot.yml`, the missing required scripts and placeholders for `build`, `build:watch` and `typecheck`.
+4. Add the config `init` does not create: [Prettier](#prettier), [TypeScript](#typescript) and [ESLint](#eslint). Replace the `build`, `build:watch` and `typecheck` placeholders with the project's commands, and add `rimraf` as a dev dependency for the `clean` script.
 5. Run `npm install` again to install the dependencies you added in step 4 (including `rimraf`), then `npm run check`.
 
 For an existing project, follow [Migrating an existing project](#migrating-an-existing-project).
@@ -326,23 +326,22 @@ gasdev check [--fix]
 gasdev init
 ```
 
-It reads the project in the current directory and writes nothing unless `--fix` is given. A passing run prints `✓ Config check passed`; otherwise the drift is listed per file on stderr, followed by `✗ Config check failed: N issue(s) in M file(s)`.
+It reads the project in the current directory and writes nothing unless `--fix` is given or `init` is run. A passing run prints `✓ Config check passed`, or `✓ Config check passed with N warning(s)` after listing the warnings; otherwise the drift is listed per file on stderr, followed by `✗ Config check failed: N issue(s) in M file(s)`. Only issues count toward the exit code; warnings do not.
 
-`--fix` appends the template lines missing from `.gitignore` and `.prettierignore`, and creates either file from the template if it does not exist. Existing lines, comments and line endings (LF or CRLF) are kept; missing entries go at the end in template order. Each change is printed on stdout as `<file>: added <entry>` or `<file>: created`. Other drift (dependabot, scripts, `loadOrder`, html) stays report-only, and the exit code reflects the drift remaining afterwards. After upgrading `gasdev`, run `npx gasdev check --fix` to pick up new template lines.
+`check --fix` and `init` write the same fixes. `init` is the name to use when scaffolding a new project; after upgrading `gasdev`, run `npx gasdev check --fix` to pick up new template lines and scripts.
 
-`init` scaffolds a new project:
-
-- **Creates**: the same ignore-file fix as `--fix`, `.github/dependabot.yml` from the template when the file is absent, and the required scripts that are missing (plus the `gasTest` ones when `gasTest` is configured), added at the end of `scripts` in template order.
+- **Ignore files**: the template lines missing from `.gitignore` and `.prettierignore` are appended, and either file is created from the template if it does not exist. Existing lines, comments and line endings (LF or CRLF) are kept; missing entries go at the end in template order.
+- **Creates**: `.github/dependabot.yml` from the template when the file is absent, and the required scripts that are missing (plus the `gasTest` ones when `gasTest` is configured), added at the end of `scripts` in template order.
+- **Placeholders**: scripts that only have to be present (`build`, `build:watch` and `typecheck` on `gas`) have no template value, so a missing one gets a placeholder that prints `gasdev: replace the scripts.<name> placeholder in package.json` and exits 1 when run. `check` reports each placeholder as a warning until it is replaced.
 - **Never touches**: an existing file or script. A project that is already complete is left untouched.
-- **Stays manual**: scripts that only have to be present (`build`, `build:watch` and `typecheck` on `gas`) have no template value, so `check` keeps reporting them.
 - **Validation**: `package.json` and `gasdev` are validated first, so an invalid config writes nothing.
-- **Output**: each change is printed on stdout as `<file>: created`, `<file>: added <entry>` or `package.json: added scripts.<name>`, followed by the normal check report. The exit code reflects the drift remaining afterwards.
+- **Output**: each change is printed on stdout as `<file>: created`, `<file>: added <entry>`, `package.json: added scripts.<name>` or `package.json: added a placeholder scripts.<name>; …`, followed by the normal check report. What is left needs a manual edit, so the failure summary ends with `that --fix cannot fix; edit them manually`. The exit code reflects the issues remaining afterwards.
 
-| Option         | Description                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------------- |
-| `--fix`        | `check` only: append missing template lines to `.gitignore` and `.prettierignore` (creating them) |
-| `-h`, `--help` | Show usage                                                                                        |
-| `--version`    | Show the version                                                                                  |
+| Option         | Description                                                            |
+| -------------- | ---------------------------------------------------------------------- |
+| `--fix`        | `check` only: write the same fixes as `init`, then report what is left |
+| `-h`, `--help` | Show usage                                                             |
+| `--version`    | Show the version                                                       |
 
 | Code | Meaning                                                         |
 | ---- | --------------------------------------------------------------- |
@@ -402,12 +401,12 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
 
 ### What is checked
 
-| File                     | Rule                                                                                                                                                                      |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.gitignore`             | Every line of the template is present. Extra lines, blanks and comments are allowed                                                                                       |
-| `.prettierignore`        | Every line of the template is present. Extra lines, blanks and comments are allowed                                                                                       |
-| `.github/dependabot.yml` | Equals the template (ignoring trailing whitespace and final newlines)                                                                                                     |
-| `package.json` `scripts` | Required scripts have exactly the template value; present scripts must exist with any value. With `gasTest` configured, `test:gas:build` and `test:gas` are also required |
+| File                     | Rule                                                                                                                                                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.gitignore`             | Every line of the template is present. Extra lines, blanks and comments are allowed                                                                                                                                |
+| `.prettierignore`        | Every line of the template is present. Extra lines, blanks and comments are allowed                                                                                                                                |
+| `.github/dependabot.yml` | Equals the template (ignoring trailing whitespace and final newlines)                                                                                                                                              |
+| `package.json` `scripts` | Required scripts have exactly the template value; present scripts must exist with any value, and the `init` placeholder is a warning. With `gasTest` configured, `test:gas:build` and `test:gas` are also required |
 
 Required lines per preset:
 
@@ -433,7 +432,7 @@ Required scripts, exact values, for the `gas` preset. They assume `rimraf` is a 
 | `test`          | `vitest run`                                                                                |
 | `test:watch`    | `vitest`                                                                                    |
 
-The `gas` preset also requires `build`, `build:watch` and `typecheck` to exist, with any value. With `gasTest` configured it also requires `test:gas:build` (`gasdev gas-test build`) and `test:gas` (`gasdev gas-test run`).
+The `gas` preset also requires `build`, `build:watch` and `typecheck` to exist, with any value; the placeholder that `init` and `check --fix` add is reported as a warning. With `gasTest` configured it also requires `test:gas:build` (`gasdev gas-test build`) and `test:gas` (`gasdev gas-test run`).
 
 For the `node` preset the required scripts are `typecheck` (`tsc --noEmit && echo '✓ TypeScript passed'`), `lint`, `lint:fix`, `format`, `format:check`, `check`, `test` and `test:watch`, with the same values as above. No script is merely required to be present.
 

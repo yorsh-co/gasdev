@@ -3,7 +3,7 @@
 3.0 folds `gas-dev-config`, `gas-dev-bundle`, `gas-dev-release` and `gas-dev-ci` into one package named `gasdev` ([ADR 0018](adr/0018-fold-dev-tools.md), [ADR 0019](adr/0019-rename-to-gasdev.md)). Migrate once, from whichever packages you use.
 
 > [!IMPORTANT]
-> Every step is a manual edit. `gasdev check --fix` adds missing ignore lines and `gasdev init` also adds missing scripts, but never change an existing script, key or config file. `gasdev check` reports what is left.
+> Every step is a manual edit. `gasdev check --fix` and `gasdev init` add missing ignore lines, files and scripts, but never change an existing script, key or config file. `gasdev check` reports what is left.
 
 Work through the steps in order, then run the [final check](#10-check-the-migration).
 
@@ -155,7 +155,7 @@ The workflow runs `npx --no-install gasdev deploy`, so the web app needs `gasdev
 
 ## 9. Ignore lines and scripts
 
-Run `npx gasdev check --fix`. It appends the `.gitignore` and `.prettierignore` lines that gasdev 3 requires and you are missing, such as `.claude/plans/` and `.env`. It does not change existing lines or scripts, so fix what it still reports by hand. To add missing required scripts, run `npx gasdev init`; it also creates `.github/dependabot.yml` if absent.
+Run `npx gasdev check --fix`. It appends the `.gitignore` and `.prettierignore` lines that gasdev 3 requires and you are missing, such as `.claude/plans/` and `.env`. It also adds missing required scripts, creates `.github/dependabot.yml` if absent, and adds a failing placeholder for a missing `build`, `build:watch` or `typecheck`, which `check` reports as a warning until you replace it. It does not change existing lines or scripts, so fix what it still reports by hand.
 
 ## 10. Check the migration
 
