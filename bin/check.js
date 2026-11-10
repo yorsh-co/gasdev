@@ -79,6 +79,7 @@ const SELF_TEST = 'npm run test:coverage';
  * @typedef {object} Drift
  * @property {string} file Project file the drift belongs to.
  * @property {string} message What is missing, expected or different.
+ * @property {boolean} [warning] Reported without failing the check.
  */
 
 /**
@@ -109,6 +110,17 @@ const SELF_TEST = 'npm run test:coverage';
  * @property {GasTestConfig | undefined} gasTest Settings for tests that run in Apps Script.
  * @property {HtmlEntry[] | undefined} [html] Pages inlined into generated TypeScript constants.
  */
+
+/**
+ * Value `init` and `check --fix` give a script that must only be present. It
+ * fails when run, so a build cannot pass until the project supplies the command.
+ *
+ * @param {string} name Script name.
+ * @returns {string}
+ */
+export function placeholderScript(name) {
+  return `echo 'gasdev: replace the scripts.${name} placeholder in package.json' >&2 && exit 1`;
+}
 
 /** Raised for a configuration problem that prevents the check from running. */
 export class CheckError extends Error {}
@@ -579,6 +591,12 @@ function checkScripts(pkg, preset, gasTest) {
   for (const name of template.present) {
     if (scripts[name] === undefined) {
       drift.push({ file, message: `scripts.${name} is missing` });
+    } else if (scripts[name] === placeholderScript(name)) {
+      drift.push({
+        file,
+        message: `scripts.${name} is a placeholder; replace it with the project's command`,
+        warning: true,
+      });
     }
   }
   return drift;
@@ -690,23 +708,6 @@ export function checkProject(cwd) {
 }
 
 /**
- * Appends the template lines missing from `.gitignore` and `.prettierignore`,
- * creating either file when absent. The configuration is validated first, so an
- * invalid one writes nothing.
- *
- * @param {string} cwd Project root.
- * @returns {string[]} One message per change, `.gitignore` first.
- * @throws {CheckError} When package.json or the `gasdev` field is unusable or invalid.
- */
-export function fixProject(cwd) {
-  const { preset } = loadConfig(cwd);
-  return [
-    ...fixIgnoreFile(cwd, preset, '.gitignore'),
-    ...fixIgnoreFile(cwd, preset, '.prettierignore'),
-  ];
-}
-
-/**
  * Creates `.github/dependabot.yml` from the template when it is absent.
  *
  * @param {string} cwd
@@ -723,8 +724,9 @@ function createDependabot(cwd, preset) {
 }
 
 /**
- * Adds the required scripts missing from package.json, after the existing
- * ones. Existing scripts are never changed.
+ * Adds the required scripts missing from package.json, then a placeholder for
+ * each missing script that must only be present, after the existing ones.
+ * Existing scripts are never changed.
  *
  * @param {string} cwd
  * @param {Record<string, unknown>} pkg Parsed package.json.
@@ -741,15 +743,29 @@ function addScripts(cwd, pkg, preset, gasTest) {
   const missing = Object.entries(required).filter(
     ([name]) => scripts[name] === undefined,
   );
-  if (missing.length === 0) return [];
-  pkg['scripts'] = { ...scripts, ...Object.fromEntries(missing) };
+  const placeholders = template.present
+    .filter((name) => scripts[name] === undefined)
+    .map((name) => [name, placeholderScript(name)]);
+  if (missing.length === 0 && placeholders.length === 0) return [];
+  pkg['scripts'] = {
+    ...scripts,
+    ...Object.fromEntries(missing),
+    ...Object.fromEntries(placeholders),
+  };
   writeFileSync(join(cwd, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
-  return missing.map(([name]) => `package.json: added scripts.${name}`);
+  return [
+    ...missing.map(([name]) => `package.json: added scripts.${name}`),
+    ...placeholders.map(
+      ([name]) =>
+        `package.json: added a placeholder scripts.${name}; replace it with the project's command`,
+    ),
+  ];
 }
 
 /**
- * Scaffolds a project: applies the ignore-file fixes, creates
- * `.github/dependabot.yml` when absent and adds the missing required scripts.
+ * Scaffolds or repairs a project, for `init` and `check --fix`: applies the
+ * ignore-file fixes, creates `.github/dependabot.yml` when absent, adds the
+ * missing required scripts and adds placeholders for missing present-only ones.
  * Existing files and scripts are never overwritten. The configuration is
  * validated first, as is `scripts`, so an invalid one writes nothing.
  *
@@ -773,23 +789,36 @@ export function initProject(cwd) {
 
 /**
  * Formats drift as one line per entry, grouped by file, followed by a summary.
+ * Warnings are listed but do not fail the check.
  *
  * @param {Drift[]} drift
+ * @param {{ fixed?: boolean }} [options] `fixed`: the fixes were applied first,
+ *   so every remaining issue needs a manual edit.
  * @returns {string[]}
  */
-export function formatReport(drift) {
-  if (drift.length === 0) return ['✓ Config check passed'];
+export function formatReport(drift, { fixed = false } = {}) {
   /** @type {string[]} */
   const lines = [];
-  const files = [...new Set(drift.map((d) => d.file))];
-  for (const file of files) {
+  for (const file of new Set(drift.map((d) => d.file))) {
     lines.push(file);
     for (const d of drift.filter((x) => x.file === file)) {
-      lines.push(`  ${d.message}`);
+      lines.push(`  ${d.warning ? 'warning: ' : ''}${d.message}`);
     }
   }
+  const errors = drift.filter((d) => !d.warning);
+  const warnings = drift.length - errors.length;
+  if (errors.length === 0) {
+    lines.push(
+      warnings === 0
+        ? '✓ Config check passed'
+        : `✓ Config check passed with ${warnings} warning(s)`,
+    );
+    return lines;
+  }
+  const files = new Set(errors.map((d) => d.file)).size;
   lines.push(
-    `✗ Config check failed: ${drift.length} issue(s) in ${files.length} file(s)`,
+    `✗ Config check failed: ${errors.length} issue(s) in ${files} file(s)` +
+      (fixed ? ' that --fix cannot fix; edit them manually' : ''),
   );
   return lines;
 }

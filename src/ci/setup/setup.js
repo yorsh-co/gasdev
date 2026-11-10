@@ -9,6 +9,7 @@ import { deployment } from './steps/deployment.js';
 import { login } from './steps/login.js';
 import { project } from './steps/project.js';
 import { push } from './steps/push.js';
+import { createMissingTemplates } from './templates.js';
 
 /**
  * Runs the setup wizard for the project in `cwd`.
@@ -26,6 +27,7 @@ export async function setup(
   io,
   { createClasp = defaultCreateClasp } = {},
 ) {
+  await createMissingTemplates(cwd, io);
   const config = loadConfig(cwd);
   assertEnvIgnored(cwd);
   io.log.raw(`${pkg.name} ${pkg.version}`);
