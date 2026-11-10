@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- `gasdev setup` offers to create a missing `.clasp.example.json` or `appsscript.example.json` with defaults instead of failing on freshly scaffolded projects; see ADR 0023
 - The 3.0 migration guide lists every manual edit in order, including all tsconfig files, `eslint.config.js`, `engines.node` and generated files, and ends with a check
 - The 3.0 migration guide lists the `gas-dev-config/test` to `gasdev/test` specifier in step 5 and adds a grep for camelCase leftovers to step 10
 - `gasdev check --fix` writes the same fixes as `gasdev init`, adding missing required scripts and `.github/dependabot.yml`, and its failure summary says the remaining issues need a manual edit
