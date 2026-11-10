@@ -8,7 +8,6 @@ import { main as releaseMain } from '../src/release/cli.js';
 import {
   CheckError,
   checkProject,
-  fixProject,
   formatReport,
   initProject,
   loadConfig,
@@ -40,10 +39,12 @@ const USAGE = `Usage: gasdev check [--fix]
        gasdev peers sync [--check]
 
 Reports drift of .gitignore, .prettierignore, .github/dependabot.yml and the
-standard package.json scripts from the preset templates. Writes only with --fix.
-init scaffolds a new project: it creates or completes those ignore files, creates
-.github/dependabot.yml when absent and adds the missing required scripts. It never
-overwrites an existing file or script, then prints the check report.
+standard package.json scripts from the preset templates. Writes only with --fix
+or init, which do the same: create or complete those ignore files, create
+.github/dependabot.yml when absent, add the missing required scripts and add a
+failing placeholder for each missing script the project must supply (reported as
+a warning until replaced). They never overwrite an existing file or script, then
+print the check report, listing what still needs a manual edit.
 
 The preset is read from package.json: "gasdev": { "preset": "gas" | "node" }
 (default: gas). "loadOrder", "peers", "gasTest" and "html" (gas preset only)
@@ -51,8 +52,7 @@ and "bundle", "release" and "ci" are also validated.
 
 Commands:
   check            Compare the project in the current directory with the templates
-  init             Create the ignore files, .github/dependabot.yml and the
-                   required package.json scripts that are missing
+  init             Same as check --fix; for scaffolding a new project
   gas-test build   Build one self-contained script (peers, library, test runtime
                    and gas-test/*.ts) to paste into the Apps Script editor
   gas-test run     Push that script to the dedicated test project with clasp
@@ -84,8 +84,7 @@ Options:
   --keep           gas-test run: keep the temporary project directory
   --check          html, peers sync: write nothing; exit 1 when a generated
                    file is stale
-  --fix            check: append missing template lines to .gitignore and
-                   .prettierignore (creating them if absent)
+  --fix            check: write what init writes, then report what is left
                    github: create or update the rulesets
 `;
 
@@ -181,16 +180,17 @@ export async function main(argv) {
     }
     if (isBuild) return runBuild(process.cwd(), { out: values.out });
     if (isRun) return runRun(process.cwd(), { keep: values.keep === true });
-    if (isInit || values.fix) {
-      const apply = isInit ? initProject : fixProject;
-      for (const message of apply(process.cwd())) {
+    const fixed = isInit || values.fix === true;
+    if (fixed) {
+      for (const message of initProject(process.cwd())) {
         process.stdout.write(`${message}\n`);
       }
     }
     const { drift } = checkProject(process.cwd());
-    const out = formatReport(drift).join('\n') + '\n';
-    (drift.length === 0 ? process.stdout : process.stderr).write(out);
-    return drift.length === 0 ? 0 : 1;
+    const passed = drift.every((d) => d.warning);
+    const out = formatReport(drift, { fixed }).join('\n') + '\n';
+    (passed ? process.stdout : process.stderr).write(out);
+    return passed ? 0 : 1;
   } catch (error) {
     if (
       error instanceof CheckError ||
