@@ -10,6 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { placeholderScript } from '../bin/check.js';
 import { REPO_ROOT } from './support.js';
 
 const BIN = join(REPO_ROOT, 'bin', 'gasdev.js');
@@ -319,9 +320,95 @@ describe.each(['gas', 'node'])('check (%s preset)', (preset) => {
       expect(result.stdout).toContain('.gitignore: added .worktrees/');
       expect(read(dir, '.gitignore')).toContain('.worktrees/');
       expect(result.stderr).toContain('.github/dependabot.yml');
-      expect(result.stderr).toContain('1 issue(s) in 1 file(s)');
+      expect(result.stderr).toContain(
+        '1 issue(s) in 1 file(s) that --fix cannot fix; edit them manually',
+      );
+    });
+
+    it('adds a missing required script', () => {
+      const dir = make();
+      const pkg = readPackage(dir);
+      const expected = pkg.scripts.lint;
+      delete pkg.scripts.lint;
+      writePackage(dir, pkg);
+      const result = run(dir, ['check', '--fix']);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('package.json: added scripts.lint');
+      expect(readPackage(dir).scripts.lint).toBe(expected);
+    });
+
+    it('creates a missing dependabot.yml', () => {
+      const dir = make();
+      rmSync(join(dir, '.github', 'dependabot.yml'));
+      const result = run(dir, ['check', '--fix']);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('.github/dependabot.yml: created');
     });
   });
+});
+
+describe('check (placeholder scripts)', () => {
+  const PRESENT = ['build', 'build:watch', 'typecheck'];
+
+  it('adds a failing placeholder for each missing present script with --fix', () => {
+    const dir = createCleanProject('gas');
+    const pkg = readPackage(dir);
+    for (const name of PRESENT) delete pkg.scripts[name];
+    writePackage(dir, pkg);
+    const result = run(dir, ['check', '--fix']);
+    expect(result.status).toBe(0);
+    const scripts = readPackage(dir).scripts;
+    for (const name of PRESENT) {
+      expect(scripts[name]).toBe(placeholderScript(name));
+      expect(result.stdout).toContain(
+        `package.json: added a placeholder scripts.${name}; replace it`,
+      );
+      expect(result.stdout).toContain(
+        `  warning: scripts.${name} is a placeholder; replace it with the project's command\n`,
+      );
+    }
+    expect(result.stdout.trimEnd()).toMatch(
+      /✓ Config check passed with 3 warning\(s\)$/,
+    );
+  });
+
+  it('reports a placeholder as a warning without failing', () => {
+    const dir = createCleanProject('gas');
+    const pkg = readPackage(dir);
+    pkg.scripts.build = placeholderScript('build');
+    writePackage(dir, pkg);
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(
+      "package.json\n  warning: scripts.build is a placeholder; replace it with the project's command\n" +
+        '✓ Config check passed with 1 warning(s)\n',
+    );
+  });
+
+  it('still fails on other drift alongside a placeholder', () => {
+    const dir = createCleanProject('gas');
+    const pkg = readPackage(dir);
+    pkg.scripts.build = placeholderScript('build');
+    delete pkg.scripts.typecheck;
+    writePackage(dir, pkg);
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('warning: scripts.build is a placeholder');
+    expect(result.stderr).toContain('1 issue(s) in 1 file(s)\n');
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'exits non-zero with the replacement hint when run',
+    () => {
+      const result = spawnSync('sh', ['-c', placeholderScript('build')], {
+        encoding: 'utf8',
+      });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe(
+        'gasdev: replace the scripts.build placeholder in package.json\n',
+      );
+    },
+  );
 });
 
 describe('check (preset specifics)', () => {
@@ -749,40 +836,43 @@ describe('init', () => {
         expect(result.stdout).toContain(`${file}: created`);
       }
       const { required, present } = scriptsOf(preset);
+      const placeholders = Object.fromEntries(
+        present.map((/** @type {string} */ n) => [n, placeholderScript(n)]),
+      );
       const pkg = readPackage(dir);
-      expect(pkg.scripts).toEqual(required);
-      expect(Object.keys(pkg.scripts)).toEqual(Object.keys(required));
+      expect(pkg.scripts).toEqual({ ...required, ...placeholders });
+      expect(Object.keys(pkg.scripts)).toEqual([
+        ...Object.keys(required),
+        ...present,
+      ]);
       for (const name of Object.keys(required)) {
         expect(result.stdout).toContain(`package.json: added scripts.${name}`);
       }
       expect(readFileSync(join(dir, 'package.json'), 'utf8')).toMatch(/\n$/);
-      if (p === 'node') {
-        expect(result.status).toBe(0);
-        expect(result.stdout.trimEnd().endsWith('✓ Config check passed')).toBe(
-          true,
-        );
-      } else {
-        expect(result.status).toBe(1);
-        const reported = result.stderr
-          .split('\n')
-          .filter((l) => l.startsWith('  '))
-          .map((l) => l.trim());
-        expect(reported).toEqual(
-          present.map((/** @type {string} */ n) => `scripts.${n} is missing`),
-        );
-      }
+      expect(result.status).toBe(0);
+      const reported = result.stdout
+        .split('\n')
+        .filter((l) => l.startsWith('  '))
+        .map((l) => l.trim());
+      expect(reported).toEqual(
+        present.map(
+          (/** @type {string} */ n) =>
+            `warning: scripts.${n} is a placeholder; replace it with the project's command`,
+        ),
+      );
     });
 
     it('keeps differing scripts and appends missing ones in order', () => {
       const dir = createEmptyProject(p, { scripts: { test: 'jest' } });
       const result = run(dir, ['init']);
-      const { required } = scriptsOf(preset);
+      const { required, present } = scriptsOf(preset);
       const names = Object.keys(required);
       const pkg = readPackage(dir);
       expect(pkg.scripts.test).toBe('jest');
       expect(Object.keys(pkg.scripts)).toEqual([
         'test',
         ...names.filter((n) => n !== 'test'),
+        ...present,
       ]);
       expect(result.stdout).not.toContain('added scripts.test\n');
       expect(result.stderr).toContain(
