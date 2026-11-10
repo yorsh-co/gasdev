@@ -42,7 +42,7 @@ export async function createMissingTemplates(cwd, io) {
   });
   if (!create) {
     throw new DeployError(
-      `${names} not found; create them or rerun setup and accept the defaults (see "Commit the clasp and manifest templates" in the README).`,
+      `${names} not found; create ${missing.length === 1 ? 'it' : 'them'} or rerun setup and accept the defaults (see "Commit the clasp and manifest templates" in the README).`,
     );
   }
   for (const [name, value] of missing) {

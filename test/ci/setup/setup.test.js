@@ -148,7 +148,7 @@ describe('setup', () => {
   describe('missing templates', () => {
     it('creates both defaults after confirmation and continues', async () => {
       const cwd = createProject({ clasp: null, manifest: null });
-      await run(cwd, [true, 'keep', 'Etc/UTC', '', true], {
+      const { stdout } = await run(cwd, [true, 'keep', 'Etc/UTC', '', true], {
         FAKE_CLASP_USER: 'dev@example.com',
         FAKE_CLASP_DEPLOYMENTS: DEPLOYMENTS,
         FAKE_CLASP_SCRIPT_ID: 'script-9',
@@ -167,7 +167,16 @@ describe('setup', () => {
           2,
         )}\n`,
       );
-      expect(readCalls(fake.logPath).length).toBeGreaterThan(0);
+      expect(stdout).toContain(
+        'Created .clasp.example.json; review and commit it.',
+      );
+      expect(stdout).toContain(
+        'Created appsscript.example.json; review and commit it.',
+      );
+      const commands = readCalls(fake.logPath).map((c) =>
+        c.args[0] === '--json' ? c.args[1] : c.args[0],
+      );
+      expect(commands[0]).toBe('show-authorized-user');
     });
 
     it('creates only the missing file', async () => {
@@ -181,7 +190,17 @@ describe('setup', () => {
         FAKE_CLASP_DEPLOYMENTS: DEPLOYMENTS,
         FAKE_CLASP_SCRIPT_ID: 'script-9',
       });
-      expect(existsSync(join(cwd, 'appsscript.example.json'))).toBe(true);
+      expect(readFileSync(join(cwd, 'appsscript.example.json'), 'utf8')).toBe(
+        `${JSON.stringify(
+          {
+            runtimeVersion: 'V8',
+            exceptionLogging: 'STACKDRIVER',
+            oauthScopes: [],
+          },
+          null,
+          2,
+        )}\n`,
+      );
       expect(readFileSync(join(cwd, '.clasp.example.json'), 'utf8')).toBe(
         before,
       );
@@ -196,6 +215,16 @@ describe('setup', () => {
       expect(error.message).toContain('README');
       expect(existsSync(join(cwd, '.clasp.example.json'))).toBe(false);
       expect(existsSync(join(cwd, 'appsscript.example.json'))).toBe(false);
+    });
+
+    it('uses singular wording when one file is missing and declined', async () => {
+      const cwd = createProject({
+        clasp: { scriptId: '', rootDir: 'src' },
+        manifest: null,
+      });
+      const error = await run(cwd, [false]).catch((e) => e);
+      expect(error).toBeInstanceOf(DeployError);
+      expect(error.message).toContain('create it or rerun');
     });
 
     it('rejects with CancelledError when the prompt is cancelled', async () => {
