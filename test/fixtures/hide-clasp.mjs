@@ -1,16 +1,16 @@
-import { registerHooks } from 'node:module';
+import Module from 'node:module';
 
 /**
- * Preloaded with `--import` to make `@google/clasp` unresolvable, for both `import` and
- * `require.resolve`, so the missing-clasp path can be exercised in a spawned process.
+ * Preloaded with `--import` to make `@google/clasp` unresolvable to `require.resolve`, which is how
+ * `src/clasp-bin.js` locates it, so the missing-clasp path can be exercised in a spawned process.
  */
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === '@google/clasp' || specifier.startsWith('@google/clasp/')) {
-      throw Object.assign(new Error(`Cannot find package '${specifier}'`), {
-        code: 'ERR_MODULE_NOT_FOUND',
-      });
-    }
-    return nextResolve(specifier, context);
-  },
-});
+const resolveFilename = Module._resolveFilename;
+
+Module._resolveFilename = function (request, ...rest) {
+  if (request === '@google/clasp' || request.startsWith('@google/clasp/')) {
+    throw Object.assign(new Error(`Cannot find module '${request}'`), {
+      code: 'MODULE_NOT_FOUND',
+    });
+  }
+  return resolveFilename.call(this, request, ...rest);
+};
