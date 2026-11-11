@@ -28,7 +28,8 @@
     "tsconfig",
     "prettier.json",
     "templates",
-    "test-loader"
+    "test-loader",
+    "CHANGELOG.md"
   ],
   "prettier": {
     "singleQuote": true
