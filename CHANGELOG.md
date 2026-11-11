@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Dev-only: the missing-clasp `gas-test` CLI test passes on Node 22, as its fixture hides clasp by patching `Module._resolveFilename`; ADR 0024 amends ADR 0021's rationale
+
 ---
 
 ## [3.0.0] - 2026-11-07
