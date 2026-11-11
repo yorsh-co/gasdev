@@ -468,17 +468,17 @@ describe('resolveClaspBin', () => {
   it('wraps a resolution failure in a DeployError', () => {
     vi.mocked(resolveBin).mockImplementationOnce(() => {
       throw new Error(
-        'Could not resolve the @google/clasp bin; is it installed?',
+        '@google/clasp is not installed. Install it with `npm install -D @google/clasp`.',
       );
     });
     expect(() => resolveClaspBin('/project')).toThrow(DeployError);
     vi.mocked(resolveBin).mockImplementationOnce(() => {
       throw new Error(
-        'Could not resolve the @google/clasp bin; is it installed?',
+        '@google/clasp is not installed. Install it with `npm install -D @google/clasp`.',
       );
     });
     expect(() => resolveClaspBin('/project')).toThrow(
-      'Could not resolve the @google/clasp bin; is it installed?',
+      '@google/clasp is not installed. Install it with `npm install -D @google/clasp`.',
     );
   });
 
