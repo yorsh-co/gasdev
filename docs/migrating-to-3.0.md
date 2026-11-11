@@ -167,4 +167,4 @@ grep -rnE "gasDev(Config|Bundle|Release|Ci)" --exclude-dir={node_modules,.git} -
 npm run check
 ```
 
-Both `grep`s should print nothing. Hits in vendored or generated files, such as a git subtree or a bundled `gas-*` library, are expected; leave them, since they clear when those dependencies release on gasdev 3. Comments and docs that still name the old tools count too. Rewrite config examples in docs to the nested shape from [step 3](#3-packagejson-keys), not by renaming the key. `npm run check` runs `gasdev check` and must pass. For a library with Apps Script tests, also run `npm run test:gas`.
+Both `grep`s should print nothing outside vendored or generated files. Comments and docs that still name the old tools count too. Leave hits in vendored or generated files, such as a git subtree or a bundled `gas-*` library; they clear when those dependencies release on gasdev 3. Rewrite config examples in docs to the nested shape from [step 3](#3-packagejson-keys), not by renaming the key. `npm run check` runs `gasdev check` and must pass. For a library with Apps Script tests, also run `npm run test:gas`.
