@@ -6,7 +6,7 @@
 
 ### Fixed
 
-- `gasdev setup` and `gasdev deploy` now say how to install `@google/clasp` (`npm install -D @google/clasp`) when it cannot be resolved, instead of asking "is it installed?".
+- `gasdev setup` and `gasdev deploy` now say how to install `@google/clasp` (`npm install -D @google/clasp`) when it cannot be resolved, instead of asking "is it installed?"
 
 ---
 
