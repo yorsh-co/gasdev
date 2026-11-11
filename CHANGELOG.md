@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `gasdev setup` and `gasdev deploy` now say how to install `@google/clasp` (`npm install -D @google/clasp`) when it cannot be resolved, instead of asking "is it installed?".
+
 ---
 
 ## [3.0.0] - 2026-11-07
