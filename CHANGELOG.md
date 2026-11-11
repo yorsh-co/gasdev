@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The 3.0 migration guide's step 10 says grep hits in vendored or generated files are expected and should be left
+
 ---
 
 ## [3.0.0] - 2026-11-07
