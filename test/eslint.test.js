@@ -41,7 +41,9 @@ async function resolved(linter, dir, file) {
 /**
  * Runs the ESLint CLI with the project as cwd, as a consumer would; type-aware
  * parsing resolves `project` against the process cwd, so it cannot be driven
- * in-process for several projects at once.
+ * in-process for several projects at once. The CLI runs without vitest's
+ * subprocess coverage, because it executes no measured code and the dumps made
+ * type-aware runs exceed the timeout under `--coverage`.
  *
  * @param {string} dir Project directory.
  * @param {string[]} targets Files or directories to lint, relative to `dir`.
@@ -54,6 +56,11 @@ function lint(dir, ...targets) {
     {
       cwd: dir,
       encoding: 'utf8',
+      env: {
+        ...process.env,
+        NODE_V8_COVERAGE: undefined,
+        NODE_DISABLE_COMPILE_CACHE: undefined,
+      },
     },
   );
   if (!stdout) throw new Error(stderr);
