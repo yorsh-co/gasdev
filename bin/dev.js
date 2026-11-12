@@ -1,5 +1,7 @@
 // @ts-check
+import { watch } from 'node:fs';
 import { createServer } from 'node:http';
+import { dirname, resolve } from 'node:path';
 import { inlinePage } from './html.js';
 
 /** Raised for a `gasdev dev` problem that prevents the server from running. */
@@ -142,4 +144,65 @@ export function createDevServer(cwd, entries) {
       for (const client of clients) client.write('event: reload\ndata: {}\n\n');
     },
   };
+}
+
+/**
+ * `dev`: serves the configured pages on localhost and reloads them when a
+ * file under an entry's directory changes. Runs until SIGINT or SIGTERM.
+ *
+ * @param {string} cwd Project root.
+ * @param {import('./check.js').HtmlEntry[] | undefined} entries Configured `gasdev.html`.
+ * @param {{ port: number }} options
+ * @returns {Promise<number>} 0 after a clean shutdown.
+ * @throws {DevError} When `html` is not configured or the port is in use.
+ */
+export async function runDev(cwd, entries, { port }) {
+  if (entries === undefined) {
+    throw new DevError('package.json: "gasdev.html" is not configured');
+  }
+  const { server, reload } = createDevServer(
+    cwd,
+    entries.map((e) => e.entry),
+  );
+
+  /** @type {NodeJS.Timeout | undefined} */
+  let timer;
+  const onChange = () => {
+    clearTimeout(timer);
+    timer = setTimeout(reload, 50);
+  };
+  const dirs = new Set(entries.map((e) => dirname(resolve(cwd, e.entry))));
+  const watchers = [...dirs].map((dir) =>
+    watch(dir, { recursive: true }, onChange),
+  );
+  const closeWatchers = () => {
+    clearTimeout(timer);
+    for (const watcher of watchers) watcher.close();
+  };
+
+  try {
+    await new Promise((resolveListen, reject) => {
+      server.once('error', reject);
+      server.listen(port, '127.0.0.1', () => resolveListen(undefined));
+    });
+  } catch (error) {
+    closeWatchers();
+    if (/** @type {NodeJS.ErrnoException} */ (error).code === 'EADDRINUSE') {
+      throw new DevError(`port ${port} is already in use`);
+    }
+    throw error;
+  }
+  const { port: bound } = /** @type {import('node:net').AddressInfo} */ (
+    server.address()
+  );
+  process.stdout.write(`gasdev dev: http://127.0.0.1:${bound}/\n`);
+
+  await new Promise((resolveSignal) => {
+    process.once('SIGINT', resolveSignal);
+    process.once('SIGTERM', resolveSignal);
+  });
+  closeWatchers();
+  server.closeAllConnections();
+  await new Promise((resolveClose) => server.close(resolveClose));
+  return 0;
 }

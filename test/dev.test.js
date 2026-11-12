@@ -1,9 +1,10 @@
+import { spawnSync } from 'node:child_process';
 import { request } from 'node:http';
 import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createDevServer } from '../bin/dev.js';
+import { createDevServer, DevError, runDev } from '../bin/dev.js';
 import { REPO_ROOT } from './support.js';
 
 const APP = join(REPO_ROOT, 'test', 'fixtures', 'html', 'app');
@@ -173,5 +174,97 @@ describe('createDevServer', () => {
     }
     await reader.cancel();
     expect(text).toContain('event: reload');
+  });
+});
+
+describe('runDev', () => {
+  const CONFIG = [
+    { entry: ENTRY, out: 'src/generated/app.html.ts', name: '_APP_HTML' },
+  ];
+
+  /**
+   * @param {string} cwd
+   * @param {string[]} args
+   */
+  function cli(cwd, args) {
+    const result = spawnSync(
+      process.execPath,
+      [join(REPO_ROOT, 'bin', 'gasdev.js'), ...args],
+      { cwd, encoding: 'utf8' },
+    );
+    return { status: result.status, stderr: result.stderr };
+  }
+
+  it('reloads SSE clients when a watched file changes', async () => {
+    const dir = createApp();
+    let output = '';
+    const write = process.stdout.write.bind(process.stdout);
+    process.stdout.write = /** @type {typeof process.stdout.write} */ (
+      (chunk) => {
+        output += String(chunk);
+        return true;
+      }
+    );
+    const done = runDev(dir, CONFIG, { port: 0 });
+    let base;
+    try {
+      while (!output.includes('\n'))
+        await new Promise((r) => setTimeout(r, 10));
+      base = output.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0];
+    } finally {
+      process.stdout.write = write;
+    }
+    const res = await fetch(`${base}/__gasdev/events`);
+    const reader = /** @type {ReadableStream} */ (res.body).getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    while (!text.includes(': connected')) {
+      text += decoder.decode((await reader.read()).value);
+    }
+    writeFileSync(join(dir, 'src', 'web', 'app.css'), 'body { color: red; }');
+    while (!text.includes('event: reload')) {
+      text += decoder.decode((await reader.read()).value);
+    }
+    process.emit('SIGINT');
+    expect(await done).toBe(0);
+  });
+
+  it('rejects when html is not configured', async () => {
+    await expect(runDev(APP, undefined, { port: 0 })).rejects.toBeInstanceOf(
+      DevError,
+    );
+  });
+
+  it('rejects a port that is in use', async () => {
+    const { server } = createDevServer(APP, [ENTRY]);
+    await new Promise((r) => server.listen(0, '127.0.0.1', () => r(undefined)));
+    cleanups.push(() => server.close());
+    const { port } = /** @type {import('node:net').AddressInfo} */ (
+      server.address()
+    );
+    await expect(runDev(APP, CONFIG, { port })).rejects.toThrow(
+      `port ${port} is already in use`,
+    );
+  });
+
+  it('rejects an invalid --port', () => {
+    for (const port of ['abc', '0', '70000', '1.5']) {
+      expect(cli(APP, ['dev', '--port', port]).status).toBe(2);
+    }
+  });
+
+  it('rejects --port with another command', () => {
+    const result = cli(APP, ['html', '--port', '3000']);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('--port is only valid with dev');
+  });
+
+  it('exits 1 when html is not configured', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gasdev-dev-'));
+    cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+    writeFileSync(join(dir, 'package.json'), '{"name":"x"}');
+    const result = cli(dir, ['dev']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('"gasdev.html" is not configured');
   });
 });
