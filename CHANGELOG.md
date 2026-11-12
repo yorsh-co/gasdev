@@ -50,6 +50,7 @@
 - README corrections where statements contradicted the code: no nested `gasdev.release` examples, the ruleset check applies only with `githubRelease`, `npm install` and the preset come before `init`, semver range wording, the dist branch versus the git-flow release branch, and committing `appsscript.example.json`
 - README setup steps name `eslint`, `prettier`, `typescript` and the optional `@google/clasp` as the npm peer dependencies to install with `gasdev`
 - Dev-only: the eslint preset tests spawn the ESLint CLI without vitest's subprocess coverage env, so they no longer time out under `npm run test:coverage`
+- `gasdev bundle` rejects a library whose dist tag has a `gasLibrary.loadOrder` file or `.d.ts` file that is, or sits under, a symbolic link, so a dist tag cannot pull local files into the bundle
 
 ### Removed
 
