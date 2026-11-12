@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The published package includes `CHANGELOG.md`
+
 ---
 
 ## [3.0.0] - 2026-11-07
