@@ -239,7 +239,7 @@ describe('gas-test run', () => {
     expect(result.stderr).toContain('"gasdev.gasTest" is required');
   });
 
-  // `module.registerHooks` is the only hook API that covers `require.resolve`.
+  // The fixture patches CommonJS resolution because `src/clasp-bin.js` locates clasp with `require.resolve`.
   it('prints the install hint when clasp cannot be resolved', () => {
     const dir = createProject();
     const { env, entries } = fakeEnv();

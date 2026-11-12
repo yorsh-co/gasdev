@@ -8,11 +8,11 @@ import { main as releaseMain } from '../src/release/cli.js';
 import {
   CheckError,
   checkProject,
-  fixProject,
   formatReport,
   initProject,
   loadConfig,
 } from './check.js';
+import { DevError, runDev } from './dev.js';
 import { GasTestError, runBuild, runRun } from './gas-test.js';
 import { GithubError, runGithub } from './github.js';
 import { HtmlError, runHtml } from './html.js';
@@ -25,6 +25,7 @@ const OPTIONS = /** @type {const} */ ({
   keep: { type: 'boolean' },
   check: { type: 'boolean' },
   fix: { type: 'boolean' },
+  port: { type: 'string' },
 });
 
 const USAGE = `Usage: gasdev check [--fix]
@@ -33,6 +34,7 @@ const USAGE = `Usage: gasdev check [--fix]
        gasdev gas-test build [--out <file>]
        gasdev gas-test run [--keep]
        gasdev html [--check]
+       gasdev dev [--port <n>]
        gasdev bundle
        gasdev release [--dry-run] [--target <branch>]...
        gasdev setup
@@ -40,18 +42,20 @@ const USAGE = `Usage: gasdev check [--fix]
        gasdev peers sync [--check]
 
 Reports drift of .gitignore, .prettierignore, .github/dependabot.yml and the
-standard package.json scripts from the preset templates. Writes only with --fix.
-init scaffolds a new project: it creates or completes those ignore files, creates
-.github/dependabot.yml when absent and adds the missing required scripts. It never
-overwrites an existing file or script, then prints the check report.
+standard package.json scripts from the preset templates. Writes only with --fix
+or init, which do the same: create or complete those ignore files, create
+.github/dependabot.yml when absent, add the missing required scripts and add a
+failing placeholder for each missing script the project must supply (reported as
+a warning until replaced). They never overwrite an existing file or script, then
+print the check report, listing what still needs a manual edit.
 
 The preset is read from package.json: "gasdev": { "preset": "gas" | "node" }
-(default: gas). "loadOrder", "peers", "gasTest" and "html" are also validated.
+(default: gas). "loadOrder", "peers", "gasTest" and "html" (gas preset only)
+and "bundle", "release" and "ci" are also validated.
 
 Commands:
   check            Compare the project in the current directory with the templates
-  init             Create the ignore files, .github/dependabot.yml and the
-                   required package.json scripts that are missing
+  init             Same as check --fix; for scaffolding a new project
   gas-test build   Build one self-contained script (peers, library, test runtime
                    and gas-test/*.ts) to paste into the Apps Script editor
   gas-test run     Push that script to the dedicated test project with clasp
@@ -62,6 +66,9 @@ Commands:
   html             Inline each "html" entry's local stylesheets and scripts
                    (TypeScript is transpiled) into a generated .ts file that
                    declares the page as a string constant
+  dev              Serve each "html" entry on 127.0.0.1 with the same inlining as
+                   html (data-dev-only elements kept) and reload the page when a
+                   file in the entry's directory changes
   bundle           Bundle gas-* libraries from their dist tags into one global
                    script file (see "gasdev.bundle"; run bundle --help)
   release          Publish the build of a gas-* library to its dist branch(es)
@@ -83,8 +90,8 @@ Options:
   --keep           gas-test run: keep the temporary project directory
   --check          html, peers sync: write nothing; exit 1 when a generated
                    file is stale
-  --fix            check: append missing template lines to .gitignore and
-                   .prettierignore (creating them if absent)
+  --port <n>       dev: port to listen on (default: 5173)
+  --fix            check: write what init writes, then report what is left
                    github: create or update the rulesets
 `;
 
@@ -144,6 +151,7 @@ export async function main(argv) {
   const isInit = command === 'init' && rest.length === 0;
   const isGithub = command === 'github' && rest.length === 0;
   const isHtml = command === 'html' && rest.length === 0;
+  const isDev = command === 'dev' && rest.length === 0;
   const isPeers = command === 'peers' && rest.join(' ') === 'sync';
   if (
     !isCheck &&
@@ -152,6 +160,7 @@ export async function main(argv) {
     !isBuild &&
     !isRun &&
     !isHtml &&
+    !isDev &&
     !isPeers
   ) {
     return usageError(`unknown command: ${positionals.join(' ')}.`);
@@ -165,6 +174,14 @@ export async function main(argv) {
   if (values.check && !isHtml && !isPeers) {
     return usageError('--check is only valid with html or peers sync.');
   }
+  let port = 5173;
+  if (values.port !== undefined) {
+    if (!isDev) return usageError('--port is only valid with dev.');
+    port = Number(values.port);
+    if (!/^\d+$/.test(values.port) || port < 1 || port > 65535) {
+      return usageError('--port must be an integer from 1 to 65535.');
+    }
+  }
   if (values.fix && !isCheck && !isGithub) {
     return usageError('--fix is only valid with check or github.');
   }
@@ -174,25 +191,31 @@ export async function main(argv) {
       const { html } = loadConfig(process.cwd());
       return runHtml(process.cwd(), html, { check: values.check === true });
     }
+    if (isDev) {
+      const { html } = loadConfig(process.cwd());
+      return await runDev(process.cwd(), html, { port });
+    }
     if (isPeers) {
       const { peers } = loadConfig(process.cwd());
       return runPeers(process.cwd(), peers, { check: values.check === true });
     }
     if (isBuild) return runBuild(process.cwd(), { out: values.out });
     if (isRun) return runRun(process.cwd(), { keep: values.keep === true });
-    if (isInit || values.fix) {
-      const apply = isInit ? initProject : fixProject;
-      for (const message of apply(process.cwd())) {
+    const fixed = isInit || values.fix === true;
+    if (fixed) {
+      for (const message of initProject(process.cwd())) {
         process.stdout.write(`${message}\n`);
       }
     }
     const { drift } = checkProject(process.cwd());
-    const out = formatReport(drift).join('\n') + '\n';
-    (drift.length === 0 ? process.stdout : process.stderr).write(out);
-    return drift.length === 0 ? 0 : 1;
+    const passed = drift.every((d) => d.warning);
+    const out = formatReport(drift, { fixed }).join('\n') + '\n';
+    (passed ? process.stdout : process.stderr).write(out);
+    return passed ? 0 : 1;
   } catch (error) {
     if (
       error instanceof CheckError ||
+      error instanceof DevError ||
       error instanceof GasTestError ||
       error instanceof GithubError ||
       error instanceof HtmlError ||

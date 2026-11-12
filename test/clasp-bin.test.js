@@ -14,7 +14,7 @@ describe('resolveClaspBin', () => {
 
   it('throws a plain Error when clasp cannot be resolved', () => {
     expect(() => resolveClaspBin(join(tmpdir(), 'nowhere.js'))).toThrow(
-      'Could not resolve the @google/clasp bin',
+      '@google/clasp is not installed. Install it with `npm install -D @google/clasp`.',
     );
   });
 });

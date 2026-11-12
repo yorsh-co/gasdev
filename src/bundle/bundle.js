@@ -168,7 +168,7 @@ export function bundle({
         ),
       );
     }
-    for (const file of listDeclarations(library.dir)) {
+    for (const file of listDeclarations(library.name, library.dir)) {
       typeBlocks.push(
         block(
           `${library.name}/${file}`,

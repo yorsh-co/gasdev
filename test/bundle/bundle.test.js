@@ -1,5 +1,11 @@
 // @ts-check
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -363,6 +369,115 @@ describe('library metadata', () => {
         gasLibrary: { loadOrder: ['gas-a.js'], peers: { 'gas-b': 'nope' } },
       }),
     ).toThrow(/gasLibrary\.peers\.gas-b must be a valid semver range/);
+  });
+});
+
+describe.skipIf(process.platform === 'win32')('symbolic links', () => {
+  /**
+   * Bundles gas-a from a dist tag built by `version`, which receives a directory outside the
+   * project holding `secret.js` and `secret.d.ts`.
+   *
+   * @param {(outside: string) => import('./helpers/fixtures.js').LibraryVersion} version
+   */
+  function bundleLinked(version) {
+    const sandbox = createSandbox();
+    const outside = join(sandbox, 'outside');
+    writeFiles(outside, {
+      'secret.js': "'local secret';\n",
+      'secret.d.ts': 'declare const secret: string;\n',
+    });
+    const repo = createLibrary(sandbox, 'gas-a', [version(outside)]);
+    return () =>
+      run({
+        libraries: { 'gas-a': { version: '*', repository: repo } },
+        ...project(sandbox),
+      });
+  }
+
+  it.each([
+    [
+      'a file outside the clone',
+      (/** @type {string} */ outside) => join(outside, 'secret.js'),
+    ],
+    ['the cache metadata', () => '.gasdev-bundle.json'],
+    ['a committed file', () => 'prefix.js'],
+  ])('rejects a loadOrder entry linking to %s', (_, target) => {
+    expect(
+      bundleLinked((outside) => ({
+        version: '1.0.0',
+        files: { 'prefix.js': 'var leaked =\n' },
+        symlinks: { 'linked.js': target(outside) },
+        loadOrder: ['prefix.js', 'linked.js'],
+      })),
+    ).toThrow(
+      /gas-a: gasLibrary\.loadOrder lists linked\.js, which resolves through a symbolic link in the dist tag/,
+    );
+  });
+
+  it('rejects a loadOrder entry inside a linked directory', () => {
+    expect(
+      bundleLinked((outside) => ({
+        version: '1.0.0',
+        files: { 'gas-a.js': 'var a = 1;\n' },
+        symlinks: { lib: outside },
+        loadOrder: ['gas-a.js', 'lib/secret.js'],
+      })),
+    ).toThrow(/lists lib\/secret\.js, which resolves through a symbolic link/);
+  });
+
+  it.each([
+    ['meta.d.ts', () => ({ 'meta.d.ts': '.gasdev-bundle.json' })],
+    [
+      'types/secret.d.ts',
+      (/** @type {string} */ outside) => ({ types: outside }),
+    ],
+  ])('rejects the linked declaration %s', (path, symlinks) => {
+    expect(
+      bundleLinked((outside) => ({
+        version: '1.0.0',
+        files: { 'gas-a.js': 'var a = 1;\n' },
+        symlinks: symlinks(outside),
+      })),
+    ).toThrow(
+      `gas-a: ${path} resolves through a symbolic link in the dist tag.`,
+    );
+  });
+
+  it('replaces a linked cache metadata file without writing through it', () => {
+    const sandbox = createSandbox();
+    const target = join(sandbox, 'outside', 'target.json');
+    writeFiles(join(sandbox, 'outside'), { 'target.json': 'untouched\n' });
+    const repo = createLibrary(sandbox, 'gas-a', [
+      {
+        version: '1.0.0',
+        files: { 'gas-a.js': 'var a = 1;\n' },
+        symlinks: { '.gasdev-bundle.json': target },
+      },
+    ]);
+    const options = project(sandbox);
+    const { result } = run({
+      libraries: { 'gas-a': { version: '*', repository: repo } },
+      ...options,
+    });
+    expect(result.code).toContain('var a = 1;');
+    expect(readFileSync(target, 'utf8')).toBe('untouched\n');
+    const metadata = join(options.cacheDir, 'gas-a@1.0.0/.gasdev-bundle.json');
+    expect(lstatSync(metadata).isFile()).toBe(true);
+    expect(JSON.parse(readFileSync(metadata, 'utf8'))).toMatchObject({
+      name: 'gas-a',
+      version: '1.0.0',
+      repository: repo,
+    });
+  });
+
+  it('ignores links to files the bundle does not read', () => {
+    const { result } = bundleLinked((outside) => ({
+      version: '1.0.0',
+      files: { 'gas-a.js': 'var a = 1;\n' },
+      symlinks: { 'README.md': join(outside, 'secret.js') },
+    }))();
+    expect(result.code).toContain('var a = 1;');
+    expect(result.code).not.toContain('local secret');
   });
 });
 

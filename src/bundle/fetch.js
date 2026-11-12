@@ -120,9 +120,13 @@ export function fetchLibrary({ name, version, repository, cacheDir }) {
     ]);
     const sha = git(['rev-parse', 'HEAD'], clone);
     rmSync(join(clone, '.git'), { recursive: true, force: true });
+    const metadataPath = join(clone, METADATA_FILE);
+    // The dist tag may commit this name as a symbolic link; remove it so the write cannot follow it.
+    rmSync(metadataPath, { recursive: true, force: true });
     writeFileSync(
-      join(clone, METADATA_FILE),
+      metadataPath,
       `${JSON.stringify({ name, version, repository, sha }, null, 2)}\n`,
+      { flag: 'wx' },
     );
     try {
       renameSync(clone, dir);

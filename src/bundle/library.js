@@ -1,5 +1,5 @@
 // @ts-check
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import semver from 'semver';
 import { isObject } from './config.js';
@@ -17,7 +17,7 @@ import { BundleError } from './errors.js';
  * @param {string} name Configured library name.
  * @param {string} dir Cache directory of the library.
  * @returns {LibraryMetadata}
- * @throws {BundleError} When the metadata is missing, malformed or points at missing files.
+ * @throws {BundleError} When the metadata is missing, malformed or points at missing or symlinked files.
  */
 export function readLibrary(name, dir) {
   /** @type {Record<string, unknown>} */
@@ -54,6 +54,11 @@ export function readLibrary(name, dir) {
     ) {
       throw new BundleError(
         `${name}: gasLibrary.loadOrder entry ${JSON.stringify(entry)} must be a relative .js path; ${hint}.`,
+      );
+    }
+    if (hasSymlink(dir, entry)) {
+      throw new BundleError(
+        `${name}: gasLibrary.loadOrder lists ${entry}, which resolves through a symbolic link in the dist tag; ${hint}.`,
       );
     }
     if (!isFile(join(dir, entry))) {
@@ -93,15 +98,48 @@ function isFile(path) {
 }
 
 /**
- * Lists every `.d.ts` file below a directory, recursively, sorted by path.
+ * Whether any segment of a path below `root` is a symbolic link. Following one would read content
+ * the dist tag did not commit, such as local files or the cache metadata.
  *
- * @param {string} dir
- * @returns {string[]} POSIX-style paths relative to `dir`.
+ * @param {string} root
+ * @param {string} path Relative to `root`.
+ * @returns {boolean}
  */
-export function listDeclarations(dir) {
-  const entries = readdirSync(dir, { recursive: true, encoding: 'utf8' });
+function hasSymlink(root, path) {
+  let current = root;
+  for (const segment of relative(root, join(root, path)).split(sep)) {
+    current = join(current, segment);
+    try {
+      if (lstatSync(current).isSymbolicLink()) return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Lists every `.d.ts` file below a library directory, recursively, sorted by path.
+ *
+ * @param {string} name Configured library name.
+ * @param {string} dir Cache directory of the library.
+ * @returns {string[]} POSIX-style paths relative to `dir`.
+ * @throws {BundleError} When a declaration resolves through a symbolic link.
+ */
+export function listDeclarations(name, dir) {
+  const entries = readdirSync(dir, {
+    recursive: true,
+    encoding: 'utf8',
+  }).filter((entry) => entry.endsWith('.d.ts'));
+  for (const entry of entries) {
+    if (hasSymlink(dir, entry)) {
+      throw new BundleError(
+        `${name}: ${entry} resolves through a symbolic link in the dist tag.`,
+      );
+    }
+  }
   return entries
-    .filter((entry) => entry.endsWith('.d.ts') && isFile(join(dir, entry)))
+    .filter((entry) => isFile(join(dir, entry)))
     .map((entry) => relative(dir, join(dir, entry)).split(sep).join('/'))
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }

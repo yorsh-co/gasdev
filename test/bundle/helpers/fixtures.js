@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -66,6 +67,7 @@ export function writeFiles(root, files) {
  * @typedef {object} LibraryVersion
  * @property {string} version Tagged as `dist/v<version>`.
  * @property {Record<string, string>} [files] Defaults to a single `<name>.js`.
+ * @property {Record<string, string>} [symlinks] Link path -> target, committed as symbolic links.
  * @property {string[]} [loadOrder] Defaults to the `.js` files.
  * @property {Record<string, string>} [peers]
  * @property {Record<string, unknown> | null} [gasLibrary] Replaces the generated metadata; `null` omits it.
@@ -115,6 +117,10 @@ export function createLibrary(sandbox, name, versions) {
         2,
       )}\n`,
     });
+    for (const [path, target] of Object.entries(entry.symlinks ?? {})) {
+      mkdirSync(dirname(join(repo, path)), { recursive: true });
+      symlinkSync(target, join(repo, path));
+    }
     git(repo, 'add', '-A');
     git(repo, 'commit', '-m', `merge: v${entry.version}`);
     git(repo, 'tag', `dist/v${entry.version}`);

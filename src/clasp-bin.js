@@ -33,7 +33,9 @@ export function resolveClaspBin(from = import.meta.url) {
   } catch {
     // Falls through to the error below.
   }
-  throw new Error('Could not resolve the @google/clasp bin; is it installed?');
+  throw new Error(
+    '@google/clasp is not installed. Install it with `npm install -D @google/clasp`.',
+  );
 }
 
 /**

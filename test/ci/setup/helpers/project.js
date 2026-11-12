@@ -25,8 +25,8 @@ export function writeFiles(root, files) {
  *
  * @param {object} [options]
  * @param {Record<string, unknown>} [options.pkg] package.json fields merged over the defaults.
- * @param {Record<string, unknown>} [options.clasp] Content of `.clasp.example.json`.
- * @param {Record<string, unknown>} [options.manifest] Content of `appsscript.example.json`.
+ * @param {Record<string, unknown> | null} [options.clasp] Content of `.clasp.example.json`; the file is skipped when null.
+ * @param {Record<string, unknown> | null} [options.manifest] Content of `appsscript.example.json`; the file is skipped when null.
  * @param {string} [options.gitignore] Content of `.gitignore`; omitted when undefined.
  * @param {boolean} [options.git] Run `git init` in the project.
  * @param {Record<string, string>} [options.files] Extra files (path -> content).
@@ -44,8 +44,12 @@ export function createProject({
   sandboxes.push(root);
   writeFiles(root, {
     'package.json': `${JSON.stringify({ name: 'my-app', version: '1.0.0', ...pkg }, null, 2)}\n`,
-    '.clasp.example.json': `${JSON.stringify(clasp, null, 2)}\n`,
-    'appsscript.example.json': `${JSON.stringify(manifest, null, 2)}\n`,
+    ...(clasp !== null && {
+      '.clasp.example.json': `${JSON.stringify(clasp, null, 2)}\n`,
+    }),
+    ...(manifest !== null && {
+      'appsscript.example.json': `${JSON.stringify(manifest, null, 2)}\n`,
+    }),
     ...(gitignore !== undefined && { '.gitignore': gitignore }),
   });
   writeFiles(root, files);

@@ -37,6 +37,7 @@ describe('package', () => {
     expect(paths).toContain('src/ci/index.js');
     expect(paths).toContain('src/bundle/index.js');
     expect(paths).toContain('src/ci/types.d.ts');
+    expect(paths).toContain('CHANGELOG.md');
     for (const p of paths) expect(p).not.toMatch(/^(test|docs|\.github)\//);
   });
 });

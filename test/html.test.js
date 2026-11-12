@@ -117,6 +117,15 @@ describe('inlinePage', () => {
     expect(page).not.toContain('nested');
   });
 
+  it('keeps and inlines data-dev-only elements in dev mode', () => {
+    const dev = inlinePage(APP, 'src/web/app.html', { dev: true });
+    expect(dev).toContain('dev banner');
+    expect(dev).toContain('nested');
+    expect(dev).toContain('window.mock = true;');
+    expect(dev).toContain('.mock {}');
+    expect(dev).not.toContain('src="mock.js"');
+  });
+
   it('leaves comments, inline scripts and styles alone', () => {
     expect(page).toContain('<!-- <script src="commented.js"></script> -->');
     expect(page).toContain(

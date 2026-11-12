@@ -1,8 +1,8 @@
 {
   "name": "gasdev",
-  "version": "2.2.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "Shared Prettier, TypeScript and ESLint configuration, plus release, bundle and deploy tooling, for gas-* Google Apps Script projects.",
+  "description": "Local development toolkit for Google Apps Script: shared TypeScript, ESLint and Prettier config, testing, builds, releases and CI deployment.",
   "repository": {
     "type": "git",
     "url": "https://github.com/yorsh-co/gasdev.git"
@@ -28,7 +28,8 @@
     "tsconfig",
     "prettier.json",
     "templates",
-    "test-loader"
+    "test-loader",
+    "CHANGELOG.md"
   ],
   "prettier": {
     "singleQuote": true

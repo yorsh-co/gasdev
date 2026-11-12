@@ -4,8 +4,13 @@
 
 ## [Unreleased]
 
+---
+
+## [3.0.0] - 2026-11-12
+
 ### Added
 
+- `gasdev dev` live-reload server for HtmlService pages (`--port`, default 5173); `data-dev-only` elements are kept; see ADR 0026
 - `gasdev bundle`, `gasdev release`, `gasdev setup` and `gasdev deploy` subcommands, folding in gas-dev-bundle, gas-dev-release and gas-dev-ci; the `gasdev/bundle` and `gasdev/ci` exports; and a reusable `gas-deploy` workflow; see ADRs 0010-0019
 - Legacy `gasDevConfig`, `gasDevBundle`, `gasDevRelease` and `gasDevCi` package.json keys fail with an error naming the replacement and pointing to "Migrating to 3.0"
 
@@ -24,14 +29,34 @@
 - Dev-only: a comment in `bin/check.js` notes that the self-test rewrite depends on the scripts template's `check` wording
 - Dev-only: a test covers `gasdev release` falling back to gh's exit status when `gh release create` fails without stderr
 - **BREAKING:** `gasdev deploy` errors are prefixed with `gasdev:`, matching `setup` and the other commands
+- README describes gasdev as one tool, with a Mermaid flow from release to deploy, and drops legacy and standalone-package wording
+- README: table of contents, back-to-top links, and About / Getting started / Tool reference / Contributing grouping, plus a Quick start
 - `gasdev deploy` prints the clasp it runs (`Using clasp: <path>`); see ADR 0022
 - Dev-only: coverage includes spawned `bin/*` and helper processes (`autoAttachSubprocess`), with thresholds ratcheted to 78/69/73/78
+- README is reorganised by task, with key terms, deduplicated config rules, unified exit code tables, and the 3.0 migration guide moved to `docs/migrating-to-3.0.md`
 
 ### Fixed
 
+- The published package includes `CHANGELOG.md`
+- `gasdev setup` and `gasdev deploy` now say how to install `@google/clasp` (`npm install -D @google/clasp`) when it cannot be resolved, instead of asking "is it installed?"
+- The 3.0 migration guide's step 10 says grep hits in vendored or generated files are expected and should be left
+- Dev-only: the missing-clasp `gas-test` CLI test passes on Node 22, as its fixture hides clasp by patching `Module._resolveFilename`; ADR 0024 amends ADR 0021's rationale
+- `gasdev setup` offers to create a missing `.clasp.example.json` or `appsscript.example.json` with defaults instead of failing on freshly scaffolded projects; see ADR 0023
+- The 3.0 migration guide lists every manual edit in order, including all tsconfig files, `eslint.config.js`, `engines.node` and generated files, and ends with a check
+- The 3.0 migration guide lists the `gas-dev-config/test` to `gasdev/test` specifier in step 5 and adds a grep for camelCase leftovers to step 10
+- `gasdev check --fix` writes the same fixes as `gasdev init`, adding missing required scripts and `.github/dependabot.yml`, and its failure summary says the remaining issues need a manual edit
+- `gasdev init` and `gasdev check --fix` add a placeholder for a missing `build`, `build:watch` or `typecheck` that exits 1 when run; `gasdev check` reports it as a warning instead of failing
+- The 3.0 migration guide notes prerelease ranges, adds a `gasdev check --fix` step, covers code that reads the old keys, and clarifies step 5's scope and the nested config shape in docs
 - `gasdev github` reports non-JSON gh output as an error instead of crashing
 - README lists `gasdev setup` and `gasdev deploy`, not only `gasdev gas-test run`, as needing `@google/clasp`
+- README documents the `bundle`, `release` and `ci` keys under Config check and the legacy-key error under Migrating to 3.0
 - Dev-only: clasp-bin tests build expected `package.json` file URLs portably, so they pass on Windows
+- `gasdev --help` lists `bundle`, `release` and `ci` among the validated `gasdev` keys
+- README corrections where statements contradicted the code: no nested `gasdev.release` examples, the ruleset check applies only with `githubRelease`, `npm install` and the preset come before `init`, semver range wording, the dist branch versus the git-flow release branch, and committing `appsscript.example.json`
+- README setup steps name `eslint`, `prettier`, `typescript` and the optional `@google/clasp` as the npm peer dependencies to install with `gasdev`
+- Dev-only: the eslint preset tests spawn the ESLint CLI without vitest's subprocess coverage env, so they no longer time out under `npm run test:coverage`
+- `gasdev bundle` rejects a library whose dist tag has a `gasLibrary.loadOrder` file or `.d.ts` file that is, or sits under, a symbolic link, so a dist tag cannot pull local files into the bundle
+- `gasdev bundle` replaces a `.gasdev-bundle.json` committed in a library's dist tag instead of writing the cache metadata through it, so a symbolic link of that name cannot overwrite a local file; see ADR 0025, which also records two accepted risks from symbolic links in dist tags
 
 ### Removed
 
