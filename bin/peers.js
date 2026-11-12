@@ -45,7 +45,7 @@ function git(args, cwd) {
  * Finds the highest `vX.Y.Z` tag of a peer repository that satisfies a range.
  *
  * @param {string} name Peer package name.
- * @param {string} range Semver range from `gasDevConfig.peers`.
+ * @param {string} range Semver range from `gasdev.peers`.
  * @param {(name: string) => string} repository Resolves a peer name to a git repository URL or path.
  * @returns {string} The version, without the `v` prefix.
  * @throws {PeersError} When the range is invalid or no tag satisfies it.
@@ -85,7 +85,7 @@ function resolveTag(name, range, repository) {
  * @throws {PeersError} When the tag cannot be fetched or lacks the file.
  */
 function fetchPeerTypes(name, version, repository) {
-  const dir = mkdtempSync(join(tmpdir(), 'gas-dev-config-peer-'));
+  const dir = mkdtempSync(join(tmpdir(), 'gasdev-peer-'));
   try {
     git(['init', '--quiet'], dir);
     git(
@@ -133,7 +133,7 @@ function stripVersion(text) {
  * highest matching release tag, or only checks that they are up to date.
  *
  * @param {string} cwd Project directory.
- * @param {Record<string, string> | undefined} peers `gasDevConfig.peers`.
+ * @param {Record<string, string> | undefined} peers `gasdev.peers`.
  * @param {object} [options]
  * @param {boolean} [options.check] Write nothing; return 1 when a file differs or is missing.
  * @param {(name: string) => string} [options.repository] Resolves a peer name to a git repository URL or path.
@@ -149,9 +149,7 @@ export function runPeers(
   } = {},
 ) {
   if (peers === undefined) {
-    throw new PeersError(
-      'package.json: "gasDevConfig.peers" is not configured',
-    );
+    throw new PeersError('package.json: "gasdev.peers" is not configured');
   }
   const resolved = Object.entries(peers).map(([name, range]) => {
     const version = resolveTag(name, range, repository);
@@ -171,7 +169,7 @@ export function runPeers(
     );
     for (const { name, version, path } of stale) {
       process.stderr.write(
-        `${path} is out of date with ${name}@${version}: run gas-dev-config peers sync\n`,
+        `${path} is out of date with ${name}@${version}: run gasdev peers sync\n`,
       );
     }
     if (stale.length === 0) {

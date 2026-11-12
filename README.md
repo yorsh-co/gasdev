@@ -1,79 +1,135 @@
-# gas-dev-config
+<a id="readme-top"></a>
 
-## Shared Prettier, TypeScript and ESLint configuration for gas-\* Google Apps Script projects.
+# gasdev
+
+## Local development toolkit for Google Apps Script: shared TypeScript, ESLint and Prettier config, testing, builds, releases and CI deployment.
+
+<details>
+<summary>Table of contents</summary>
+
+- [About gasdev](#about-gasdev)
+  - [Features](#features)
+  - [How it works](#how-it-works)
+  - [Key terms](#key-terms)
+- [Getting started](#getting-started)
+  - [Requirements](#requirements)
+  - [Install](#install)
+  - [Quick start](#quick-start)
+- [Shared configs](#shared-configs)
+  - [Prettier](#prettier)
+  - [TypeScript](#typescript)
+  - [ESLint](#eslint)
+- [Config check](#config-check)
+  - [The gasdev key](#the-gasdev-key)
+  - [What is checked](#what-is-checked)
+  - [Dependabot](#dependabot)
+- [Testing](#testing)
+  - [Test loader](#test-loader)
+  - [Apps Script tests](#apps-script-tests)
+- [Building](#building)
+  - [HTML build](#html-build)
+    - [Local development](#local-development)
+  - [Bundle](#bundle)
+  - [Peer types](#peer-types)
+- [Releasing](#releasing)
+  - [Release](#release)
+  - [GitHub rulesets](#github-rulesets)
+- [Deploy a web app](#deploy-a-web-app)
+- [Migrating an existing project](#migrating-an-existing-project)
+- [Migrating to 3.0](#migrating-to-30)
+- [Contributing](#contributing)
+- [License](#license)
+- [Support](#support)
+
+</details>
+
+## About gasdev
 
 > [!NOTE]
-> `gas-dev-config` is development tooling. It is installed as a dev dependency and is never pushed to Apps Script.
+> `gasdev` is development tooling. It is installed as a dev dependency and is never pushed to Apps Script.
 
 > **Disclaimer:**
 > This project and [Yorsh](https://github.com/yorsh-co) are independent and are not affiliated with, endorsed by, or associated with Google LLC.
 
 ### Features
 
-- One Prettier config, four TypeScript presets and one ESLint flat-config factory, so a tooling change is made once and rolled out by bumping a version
-- Uses each tool's own extension mechanism (shared Prettier config, tsconfig `extends`, exported ESLint factory) instead of copying files
-- ESLint `gas` preset for Apps Script TypeScript, with a `web` option for browser sources and a `node` preset for plain JavaScript tooling
-- `gas-dev-config check` reports drift of the files that cannot be extended: `.gitignore`, `.prettierignore`, `.github/dependabot.yml` and the standard `package.json` scripts
-- The check is read-only unless you pass `--fix`, which only appends missing template lines to `.gitignore` and `.prettierignore`
-- `gas-dev-config init` scaffolds a new project: ignore files, `.github/dependabot.yml` and the missing required scripts, without overwriting anything
-- `gas-dev-config/test` loads Apps Script sources, which are global-scope scripts without exports, into a fresh `node:vm` context for Vitest suites
-- `gas-dev-config gas-test` builds a library's tests into one script that runs in real Apps Script, from the editor or through clasp
-- `gas-dev-config html` inlines a page edited as `.html`, `.css` and TypeScript into one generated `.ts` string constant, so an HtmlService UI ships as a single Apps Script source file
-- `gas-dev-config peers sync` writes the peer libraries' type declarations into `src/internal/` from their tagged releases, so they never drift from hand copies
+- One shared [Prettier config](#prettier), five [TypeScript presets](#typescript) and one [ESLint factory](#eslint), rolled out by a version bump
+- Prettier, TypeScript and ESLint configs are shared through their own extension mechanisms instead of copied files, see [Shared configs](#shared-configs)
+- [ESLint](#eslint) `gas` preset for Apps Script TypeScript, with a `web` option and a `node` preset for plain JavaScript
+- [`gasdev check`](#config-check) reports drift in ignore files, Dependabot config and standard scripts
+- [`gasdev init`](#config-check) scaffolds a new project without overwriting anything
+- [`gasdev/test`](#test-loader) loads Apps Script sources into a fresh `node:vm` context for Vitest
+- [`gasdev gas-test`](#apps-script-tests) runs a library's tests in real Apps Script
+- [`gasdev html`](#html-build) inlines an HTML page into one generated `.ts` string constant
+- [`gasdev dev`](#local-development) serves HtmlService pages on localhost and reloads the browser on change
+- [`gasdev peers sync`](#peer-types) writes peer libraries' type declarations from their tagged releases
+- [`gasdev bundle`](#bundle) bundles gas-\* libraries from their `dist/vX.Y.Z` tags into one global script
+- [`gasdev release`](#release) publishes a library build to dist branches with tags in one atomic push
+- [`gasdev github`](#github-rulesets) reports GitHub ruleset drift and, with `--fix`, repairs it
+- [`gasdev setup` and `gasdev deploy`](#deploy-a-web-app) take a web app from first setup to clasp-based CI deployment
 - Plain ESM JavaScript, no build step
 
-<a id="gas-dev-tools"></a>
+<a id="gasdev-tools"></a>
 
-## The gas-dev-\* tools
+<a id="the-gasdev-tools"></a>
 
-Four development tools support gas-\* libraries and projects. None of them is ever pushed to Apps Script.
+### How it works
 
-| Tool                                                             | Installed by                                        | Purpose                                                                                                                                                                                                                                                                                |
-| ---------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `gas-dev-config` (this package)                                  | Library authors                                     | Prettier, TypeScript and ESLint presets; `check` for config drift; the `gasDevConfig` key (`loadOrder`, `peers`, `gasTest`, `html`); the Vitest loader; Apps Script tests (`gas-test build`/`run`); the HTML build (`html`); peer type sync (`peers sync`); GitHub rulesets (`github`) |
-| [`gas-dev-release`](https://github.com/yorsh-co/gas-dev-release) | Library authors                                     | Publishes the build to the `dist` branch, tagged `dist/vX.Y.Z`, with a release `package.json` that carries `gasLibrary` metadata derived from `gasDevConfig`                                                                                                                           |
-| [`gas-dev-bundle`](https://github.com/yorsh-co/gas-dev-bundle)   | Apps Script projects using several gas-\* libraries | Resolves version ranges against the `dist/vX.Y.Z` tags and writes the libraries into one script, ordered by their `gasLibrary` metadata                                                                                                                                                |
-| [`gas-dev-deploy`](https://github.com/yorsh-co/gas-dev-deploy)   | Apps Script projects that deploy a web app          | clasp login and project choice; `.clasp.json` and `appsscript.json` from the `.example.json` templates; push, then a guided manual web-app deployment recorded in `.env`; project-defined steps through `gasDevDeploy.steps`                                                           |
+gasdev is a single dev dependency whose `gasdev` command covers the life of three kinds of Apps Script project:
 
-Each is a dev dependency installed from GitHub with a `#semver:` range. A library uses `gas-dev-config` and `gas-dev-release`; a project consuming several libraries needs only `gas-dev-bundle` (a single library can be added with `git subtree` instead); a project that deploys a web app adds `gas-dev-deploy`.
+- **Library** (for example `gas-lock`): shared configs, `check`, tests, `gas-test`, `html`, `peers sync`, `release` and `github`.
+- **App that uses libraries**: `bundle`, or `git subtree` for a single library.
+- **Web app**: `setup` once, then `deploy` from CI through the reusable workflow.
 
-The tools are connected by one piece of metadata, declared once in the library:
-
-```text
-library package.json            dist/vX.Y.Z package.json          consumer project
-"gasDevConfig": {               "gasLibrary": {                   src/lib/gas-libraries.js
-  "loadOrder": [...],  ──────►    "loadOrder": [...],   ──────►   (libraries and their files
-  "peers": {...}                  "peers": {...}                   in load order)
-}                               }
-validated by                    written by                        written by
-gas-dev-config check            gas-dev-release                   gas-dev-bundle
+```mermaid
+flowchart LR
+  lib["gas-lock repo<br>main, tag v1.2.0"]
+  dist["dist branch<br>tag dist/v1.2.0"]
+  app["your-app/src/lib/<br>gas-libraries.js"]
+  web["Apps Script<br>web app"]
+  lib -->|"gasdev release"| dist
+  dist -->|"gasdev bundle"| app
+  app -->|"gasdev deploy (CI)"| web
 ```
 
-The only code dependency between them: `gas-dev-config gas-test build` uses `gas-dev-bundle` to bundle a library's peers ahead of the library under test.
+The connection is metadata: `loadOrder` in gas-lock's `gasdev` key becomes `gasLibrary.loadOrder` in the `package.json` on `dist/v1.2.0`, and `gasdev bundle` reads it to order the files. See [Library metadata](#library-metadata) and [Load order and peers](#load-order-and-peers).
 
-A library release therefore runs: `npm run check` (presets, tests and `gas-dev-config check`), `npm run test:gas` on the release branch (Apps Script tests, manual), then `npm run build:release` (build, then `gas-dev-release`).
+### Key terms
 
-## Requirements
+- **Apps Script global scope**: the files of an Apps Script project share one scope and have no `import` or `export`, so a top-level name in one file is visible in all the others.
+- **Load order**: the order in which Apps Script runs the files. A file that uses a name from another file must come after it. It is the `loadOrder` list in the `gasdev` key.
+- **gas-\* library**: a reusable Apps Script library published to a dist branch with `gasdev release` and consumed with `gasdev bundle`.
+- **Peer library**: an optional gas-\* library that another library uses when it is present. It is declared under `peers` with a version range.
+- **Dist branch**: the branch that `gasdev release` pushes the compiled output to (default `dist`).
+- **Git-flow release branch**: the `release/X.Y.Z` branch where a version is prepared before it is merged and tagged. It is not the dist branch.
+- **Drift**: a difference between your project and the template that `gasdev check` compares it with.
+- **Preset**: the project type in `gasdev.preset`: `gas` (the default) for Apps Script TypeScript projects, or `node` for plain JavaScript Node tooling. It selects the templates and the keys that `gasdev check` accepts.
 
-- Node.js ^22.13.0, ^24.0.0 or >=26.0.0
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Getting started
+
+### Requirements
+
+- Node.js ^22.15.0, ^24.0.0 or >=26.0.0
 - Peer dependencies, which stay direct dev dependencies of your project so their binaries are linked:
   - `eslint` `^10.7.0`
   - `prettier` `^3.9.6`
   - `typescript` `^5.9.3`
-  - `@google/clasp` `^3.4.1`, optional: only for `gas-dev-config gas-test run`
+  - `@google/clasp` `^3.4.1`, optional: needed by `gasdev gas-test run`, `gasdev setup` and `gasdev deploy`
 - `@types/google-apps-script`, and `@types/node` for projects with tests, as your own dev dependencies
 
 > [!IMPORTANT]
 > The presets reference `types` such as `google-apps-script` and `node`. TypeScript resolves them from your project's `node_modules/@types`, not from this package, so they must be installed by the consumer. Relying on hoisting would be fragile.
 
-## Install
+### Install
 
-Add it to your project's `package.json` as a dev dependency, pinned to a release tag, together with the peer dependencies:
+Add it to your project's `package.json` as a dev dependency, using a semver range over its release tags, together with the peer dependencies:
 
 ```json
 {
   "devDependencies": {
-    "gas-dev-config": "github:yorsh-co/gas-dev-config#semver:^1.0.0",
+    "gasdev": "github:yorsh-co/gasdev#semver:^3.0.0",
     "eslint": "^10.7.0",
     "prettier": "^3.9.6",
     "typescript": "^5.9.3",
@@ -83,32 +139,46 @@ Add it to your project's `package.json` as a dev dependency, pinned to a release
 }
 ```
 
-`@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` are dependencies of `gas-dev-config`. Remove them from your own `devDependencies`.
+`@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` are dependencies of `gasdev`, so a new project does not add them to its own `devDependencies`.
 
-## Prettier
+### Quick start
 
-Point the `prettier` key of your `package.json` at the shared config:
+For a new project:
+
+1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) as dev dependencies (see [Requirements](#requirements) and [Install](#install)), then run `npm install`.
+2. For plain JavaScript tooling, set `"gasdev": { "preset": "node" }` in `package.json`.
+3. Run `npx gasdev init` to create the ignore files, `.github/dependabot.yml`, the missing required scripts and placeholders for `build`, `build:watch` and `typecheck`.
+4. Add the config `init` does not create: [Prettier](#prettier), [TypeScript](#typescript) and [ESLint](#eslint). Replace the `build`, `build:watch` and `typecheck` placeholders with the project's commands, and add `rimraf` as a dev dependency for the `clean` script.
+5. Run `npm install` again to install the dependencies you added in step 4 (including `rimraf`), then `npm run check`.
+
+For an existing project, follow [Migrating an existing project](#migrating-an-existing-project).
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Shared configs
+
+### Prettier
+
+Use the shared Prettier config in every project, by pointing the `prettier` key of your `package.json` at it:
 
 ```json
 {
-  "prettier": "gas-dev-config/prettier"
+  "prettier": "gasdev/prettier"
 }
 ```
 
 The config is `{ "singleQuote": true }`; every other option is a Prettier 3 default.
 
-Delete `.prettierrc.json`. A `prettier` key in `package.json` takes precedence over `.prettierrc.json`, so a leftover file was already being ignored.
+### TypeScript
 
-## TypeScript
-
-Extend one of the presets from `gas-dev-config/tsconfig/`:
+Use a shared TypeScript config in every project, by extending one of the presets from `gasdev/tsconfig/`:
 
 | Preset          | Use for                         | Sets                                                                                                                                                                                                                                                                                                   |
 | --------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `gas.json`      | Apps Script backend sources     | `target` `ES2020`, `lib` `ES2021`, `types` `["google-apps-script"]`, `declaration`, `noEmitOnError`, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, `isolatedModules`, `noUncheckedSideEffectImports`, `skipLibCheck`, `forceConsistentCasingInFileNames` |
 | `web.json`      | Browser client sources          | Extends `gas.json`; `lib` `ES2021`, `DOM`, `DOM.Iterable`; `types` `[]` (no GAS types)                                                                                                                                                                                                                 |
 | `test.json`     | Vitest suites                   | Extends `gas.json`; `module` `ESNext`, `moduleResolution` `bundler`, `noEmit`, `declaration` off, `types` `["node", "google-apps-script"]`                                                                                                                                                             |
-| `gas-test.json` | Apps Script tests (`gas-test/`) | Extends `gas.json`; `noEmit`, `declaration` off, `types` `["google-apps-script", "gas-dev-config/gas-test/runtime"]`                                                                                                                                                                                   |
+| `gas-test.json` | Apps Script tests (`gas-test/`) | Extends `gas.json`; `noEmit`, `declaration` off, `types` `["google-apps-script", "gasdev/gas-test/runtime"]`                                                                                                                                                                                           |
 | `node.json`     | Plain JavaScript Node tooling   | `target` `ES2022`, `module` and `moduleResolution` `nodenext`, `types` `["node"]`, `allowJs`, `checkJs`, `noEmit`, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `skipLibCheck`                                                                                                  |
 
 `gas.json` targets ES2020 because Apps Script checks syntax on push with a parser that rejects ES2021 syntax such as `||=`, `??=` and `1_000`. BigInt literals (`1n`) are rejected too and are not downleveled, so avoid them. `lib` stays ES2021, which the V8 runtime provides. `web.json` inherits the target.
@@ -119,7 +189,7 @@ A library, `tsconfig.json`:
 
 ```json
 {
-  "extends": "gas-dev-config/tsconfig/gas.json",
+  "extends": "gasdev/tsconfig/gas.json",
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist"
@@ -132,7 +202,7 @@ Its tests, `tsconfig.test.json`:
 
 ```json
 {
-  "extends": "gas-dev-config/tsconfig/test.json",
+  "extends": "gasdev/tsconfig/test.json",
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }
 ```
@@ -141,7 +211,7 @@ A gas-webapp, `tsconfig.json` for the backend and `tsconfig.frontend.json` for t
 
 ```json
 {
-  "extends": "gas-dev-config/tsconfig/gas.json",
+  "extends": "gasdev/tsconfig/gas.json",
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist"
@@ -153,7 +223,7 @@ A gas-webapp, `tsconfig.json` for the backend and `tsconfig.frontend.json` for t
 
 ```json
 {
-  "extends": "gas-dev-config/tsconfig/web.json",
+  "extends": "gasdev/tsconfig/web.json",
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist"
@@ -162,18 +232,18 @@ A gas-webapp, `tsconfig.json` for the backend and `tsconfig.frontend.json` for t
 }
 ```
 
-## ESLint
+### ESLint
 
-`gas-dev-config/eslint` exports `gasEslint(options, ...extra)`, which returns a flat config array:
+Use the shared ESLint config in every project. `gasdev/eslint` exports `gasEslint(options, ...extra)`, which returns a flat config array:
 
 ```js
 // eslint.config.js
-import { gasEslint } from 'gas-dev-config/eslint';
+import { gasEslint } from 'gasdev/eslint';
 
 export default gasEslint();
 ```
 
-### Options
+#### Options
 
 All options are optional. Unknown options and invalid values throw a `TypeError` naming the option.
 
@@ -188,7 +258,7 @@ All options are optional. Unknown options and invalid values throw a `TypeError`
 
 Any further arguments are flat configs applied after the preset and before Prettier, for one-off rules.
 
-### What the `gas` preset lints
+#### What the `gas` preset lints
 
 - `@eslint/js` and `typescript-eslint` recommended rules
 - `src/**/*.ts` as Apps Script files: `sourceType: 'script'` (the files share one global scope), type-aware linting with `./tsconfig.json`, unused-variable rules off
@@ -202,12 +272,12 @@ Any further arguments are flat configs applied after the preset and before Prett
 
 The `node` preset lints `**/*.js` as Node ES modules with `@eslint/js` recommended rules, ignores `.worktrees/`, `.claude/worktrees/` and `node_modules/`, and also ends with `eslint-config-prettier`.
 
-### Examples
+#### Examples
 
 A library:
 
 ```js
-import { gasEslint } from 'gas-dev-config/eslint';
+import { gasEslint } from 'gasdev/eslint';
 
 export default gasEslint();
 ```
@@ -215,7 +285,7 @@ export default gasEslint();
 A gas-webapp with a browser client:
 
 ```js
-import { gasEslint } from 'gas-dev-config/eslint';
+import { gasEslint } from 'gasdev/eslint';
 
 export default gasEslint({
   web: {
@@ -225,10 +295,10 @@ export default gasEslint({
 });
 ```
 
-Node tooling (for example `gas-dev-release` itself):
+Node tooling (a CLI or a build script):
 
 ```js
-import { gasEslint } from 'gas-dev-config/eslint';
+import { gasEslint } from 'gasdev/eslint';
 
 export default gasEslint({ preset: 'node' });
 ```
@@ -236,7 +306,7 @@ export default gasEslint({ preset: 'node' });
 A one-off rule, passed as an extra flat config:
 
 ```js
-import { gasEslint } from 'gas-dev-config/eslint';
+import { gasEslint } from 'gasdev/eslint';
 
 export default gasEslint(
   { ignores: ['generated/**'] },
@@ -247,18 +317,169 @@ export default gasEslint(
 );
 ```
 
-## Test loader
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-Apps Script sources share one global scope and have no `import` or `export`, so a test cannot import them. `createGasLoader` from `gas-dev-config/test` transpiles the files once, concatenates them in load order and compiles a single `node:vm` script. Each call of the returned function evaluates it in a fresh context built from the globals you pass, so no state leaks between tests.
+## Config check
+
+Prettier, TypeScript and ESLint are shared through their own extension mechanisms. Four things have none, so `gasdev check` compares them with templates and reports the [drift](#key-terms):
+
+```
+gasdev check [--fix]
+gasdev init
+```
+
+It reads the project in the current directory and writes nothing unless `--fix` is given or `init` is run. A passing run prints `✓ Config check passed`, or `✓ Config check passed with N warning(s)` after listing the warnings; otherwise the drift is listed per file on stderr, followed by `✗ Config check failed: N issue(s) in M file(s)`. Only issues count toward the exit code; warnings do not.
+
+`check --fix` and `init` write the same fixes. `init` is the name to use when scaffolding a new project; after upgrading `gasdev`, run `npx gasdev check --fix` to pick up new template lines and scripts.
+
+- **Ignore files**: the template lines missing from `.gitignore` and `.prettierignore` are appended, and either file is created from the template if it does not exist. Existing lines, comments and line endings (LF or CRLF) are kept; missing entries go at the end in template order.
+- **Creates**: `.github/dependabot.yml` from the template when the file is absent, and the required scripts that are missing (plus the `gasTest` ones when `gasTest` is configured), added at the end of `scripts` in template order.
+- **Placeholders**: scripts that only have to be present (`build`, `build:watch` and `typecheck` on `gas`) have no template value, so a missing one gets a placeholder that prints `gasdev: replace the scripts.<name> placeholder in package.json` and exits 1 when run. `check` reports each placeholder as a warning until it is replaced.
+- **Never touches**: an existing file or script. A project that is already complete is left untouched.
+- **Validation**: `package.json` and `gasdev` are validated first, so an invalid config writes nothing.
+- **Output**: each change is printed on stdout as `<file>: created`, `<file>: added <entry>`, `package.json: added scripts.<name>` or `package.json: added a placeholder scripts.<name>; …`, followed by the normal check report. What is left needs a manual edit, so the failure summary ends with `that --fix cannot fix; edit them manually`. The exit code reflects the issues remaining afterwards.
+
+| Option         | Description                                                            |
+| -------------- | ---------------------------------------------------------------------- |
+| `--fix`        | `check` only: write the same fixes as `init`, then report what is left |
+| `-h`, `--help` | Show usage                                                             |
+| `--version`    | Show the version                                                       |
+
+| Code | Meaning                                                         |
+| ---- | --------------------------------------------------------------- |
+| `0`  | The project matches                                             |
+| `1`  | Drift, or an unusable `package.json`                            |
+| `2`  | Invalid usage (a missing or unknown command, an unknown option) |
+
+### The gasdev key
+
+The preset is read from `package.json` and defaults to `gas`. Set it to `node` for plain JavaScript tooling:
+
+```json
+{
+  "gasdev": {
+    "preset": "node"
+  }
+}
+```
+
+`loadOrder`, `peers`, `gasTest` and `html` are also read from `gasdev`, for the `gas` preset only. `bundle`, `release` and `ci` are accepted with either preset; `gasdev check` only checks that they are objects, and the commands that use them validate them (`gasdev bundle`, `gasdev release`, `gasdev setup`) as described below. Any other key or preset value is an error.
+
+```json
+{
+  "gasdev": {
+    "loadOrder": ["gas-sheet-db.types.ts", "gas-sheet-db.class.ts"],
+    "peers": { "gas-logger": "^1.2.0" }
+  }
+}
+```
+
+- `loadOrder` is the single source of truth for the order in which the global-scope files under `src/` load. Use it in tests with [`loadOrderFiles`](#load-order-from-packagejson).
+  - A non-empty array of unique, non-empty strings.
+  - Each entry is a relative POSIX path under `src/` (no leading `/`, no backslashes, no `.` or `..` segments) ending in `.ts` but not `.d.ts`.
+  - A listed file that does not exist is reported as drift: `gasdev.loadOrder: src/<entry> does not exist`.
+- `peers` lists sibling libraries that are used when present, mapped to version ranges.
+  - An object whose keys are package names matching `/^[a-z0-9][a-z0-9._-]*$/`.
+  - Each value is a non-empty string; ranges are not parsed.
+- `gasTest` configures [Apps Script tests](#apps-script-tests).
+  - An object with the keys `scopes` and `scriptId`; any other key is an error naming its path.
+  - `scopes` is a non-empty array of unique strings starting with `https://www.googleapis.com/auth/`; `scriptId` is an optional non-empty string.
+  - It requires `loadOrder`.
+- `html` configures the [HTML build](#html-build).
+  - A non-empty array of objects with the keys `entry`, `out` and `name`; any other key is an error naming its path.
+  - `out` and `name` are unique. Missing entry files, stale or missing generated files, and an `out` absent from `loadOrder` are reported as drift.
+  - It requires `loadOrder`.
+- `bundle` configures [Bundle](#bundle).
+  - Validated by `gasdev bundle`, not by `check`: an object with the keys `libraries`, `outFile` and `typesFile`; `libraries` is required.
+  - Library names match `/^[a-z0-9][a-z0-9._-]*$/`. A library is a semver range, or `{ version, repository? }` where `version` is a valid semver range and `repository` is a non-empty Git URL or path.
+  - `outFile` and `typesFile` are relative to the project root, with no `..`, ending in `.js` and `.d.ts` respectively.
+  - Unknown keys are rejected with their path, for example `gasdev.bundle.libraries.gas-lock.repositry is not a known option.`
+- `release` configures [Release configuration](#release-configuration).
+  - Validated by `gasdev release`, not by `check`: an object with the keys `remote`, `targets` and `githubRelease`; `targets` is optional (default: one `dist` target); when given, a non-empty list with unique branches.
+  - Unknown keys in `gasdev.release`, in a target or in an `include` entry are rejected, naming the key path (for example `gasdev.release.targets[1].pakageJson is not a known option`).
+- `ci` configures the [setup wizard](#wizard-configuration).
+  - Validated by `gasdev setup`, not by `check`: an object with the keys `title` and `steps`; any other key is rejected.
+- `loadOrder`, `peers`, `gasTest` and `html` with the `node` preset are an error.
+
+### What is checked
+
+| File                     | Rule                                                                                                                                                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.gitignore`             | Every line of the template is present. Extra lines, blanks and comments are allowed                                                                                                                                |
+| `.prettierignore`        | Every line of the template is present. Extra lines, blanks and comments are allowed                                                                                                                                |
+| `.github/dependabot.yml` | Equals the template (ignoring trailing whitespace and final newlines)                                                                                                                                              |
+| `package.json` `scripts` | Required scripts have exactly the template value; present scripts must exist with any value, and the `init` placeholder is a warning. With `gasTest` configured, `test:gas:build` and `test:gas` are also required |
+
+Required lines per preset:
+
+| File              | `gas`                                                                                                       | `node`                                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `.gitignore`      | `node_modules/`, `dist/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` | `node_modules/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` |
+| `.prettierignore` | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`                       | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`              |
+
+Required scripts, exact values, for the `gas` preset. They assume `rimraf` is a dev dependency of the project:
+
+| Script          | Value                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------- |
+| `clean`         | `rimraf dist`                                                                               |
+| `release`       | `gasdev release`                                                                            |
+| `build:format`  | `npm run check && npm run build && npm run format:dist`                                     |
+| `build:release` | `npm run build:format && npm run release`                                                   |
+| `lint`          | `eslint . && echo '✓ Lint passed'`                                                          |
+| `lint:fix`      | `eslint . --fix`                                                                            |
+| `format`        | `prettier . --write`                                                                        |
+| `format:dist`   | `prettier ./dist --write --ignore-path .prettierignore`                                     |
+| `format:check`  | `prettier . --check`                                                                        |
+| `check`         | `npm run format:check && npm run lint && npm run typecheck && npm run test && gasdev check` |
+| `test`          | `vitest run`                                                                                |
+| `test:watch`    | `vitest`                                                                                    |
+
+The `gas` preset also requires `build`, `build:watch` and `typecheck` to exist, with any value; the placeholder that `init` and `check --fix` add is reported as a warning. With `gasTest` configured it also requires `test:gas:build` (`gasdev gas-test build`) and `test:gas` (`gasdev gas-test run`).
+
+For the `node` preset the required scripts are `typecheck` (`tsc --noEmit && echo '✓ TypeScript passed'`), `lint`, `lint:fix`, `format`, `format:check`, `check`, `test` and `test:watch`, with the same values as above. No script is merely required to be present.
+
+Add the check to your `check` script, as in the values above, so `npm run check` fails on drift.
+
+### Dependabot
+
+Use Dependabot to keep dependencies current with one weekly grouped pull request for development dependencies. This is the `.github/dependabot.yml` that `gasdev check` enforces, for both presets:
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        patterns:
+          - '*'
+```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Testing
+
+### Test loader
+
+Use `createGasLoader` from `gasdev/test` to unit-test Apps Script sources in Node. They share one global scope and have no `import` or `export`, so a test cannot import them. The loader transpiles the files once, concatenates them in [load order](#key-terms) and compiles a single `node:vm` script. Each call of the returned function evaluates it in a fresh context built from the globals you pass, so no state leaks between tests.
 
 ```ts
 // test/harness.ts
-import { createGasLoader } from 'gas-dev-config/test';
+import { createGasLoader } from 'gasdev/test';
+import { createFakeSpreadsheetApp, createFakeLogger } from './fakes';
 
 const load = createGasLoader({
   files: ['src/gas-logger.types.ts', 'src/gas-logger.class.ts'],
   exports: ['GasLogger'],
 });
+
+// Your own test doubles for the Apps Script services; they are not provided by gasdev.
+const SpreadsheetApp = createFakeSpreadsheetApp();
+const Logger = createFakeLogger();
 
 const { GasLogger } = load({ console, SpreadsheetApp, Logger });
 ```
@@ -274,12 +495,12 @@ const { GasLogger } = load({ console, SpreadsheetApp, Logger });
 - An `exports` name that the sources do not define throws when loading, naming it.
 - Files are read and transpiled once, at creation; `load` only runs the compiled script.
 
-### Load order from `package.json`
+#### Load order from `package.json`
 
-Keep the load order in one place: `gasDevConfig.loadOrder` in `package.json` (see [Config check](#config-check)). `loadOrderFiles(root?)` returns it as `src/`-prefixed POSIX paths relative to `root` (default `process.cwd()`), ready for `files`:
+Keep the load order in one place: `gasdev.loadOrder` in `package.json` (see [The gasdev key](#the-gasdev-key)). `loadOrderFiles(root?)` returns it as `src/`-prefixed POSIX paths relative to `root` (default `process.cwd()`), ready for `files`:
 
 ```ts
-import { createGasLoader, loadOrderFiles } from 'gas-dev-config/test';
+import { createGasLoader, loadOrderFiles } from 'gasdev/test';
 
 const ROOT = process.cwd();
 
@@ -290,10 +511,10 @@ const load = createGasLoader({
 });
 ```
 
-- It throws an `Error` prefixed `loadOrderFiles:` when `package.json` cannot be read or parsed (naming its path, with the original error as `cause`), or when `gasDevConfig.loadOrder` is missing or not a non-empty array of non-empty strings.
-- It does not validate the paths; `gas-dev-config check` does.
+- It throws an `Error` prefixed `loadOrderFiles:` when `package.json` cannot be read or parsed (naming its path, with the original error as `cause`), or when `gasdev.loadOrder` is missing or not a non-empty array of non-empty strings.
+- It does not validate the paths; `gasdev check` does.
 
-### Sharing `Error`
+#### Sharing `Error`
 
 A vm context has its own built-ins, so an error thrown by the sources is not `instanceof Error` in the test realm. Pass the host `Error` to share it:
 
@@ -303,12 +524,12 @@ const { GasError } = load({ Session, console, Error });
 expect(new GasError('boom')).toBeInstanceOf(Error);
 ```
 
-### Typing the result
+#### Typing the result
 
 The exports are not inferred from the sources. Supply their shape as the type argument; without it the result is `Record<string, unknown>`.
 
 ```ts
-import { createGasLoader } from 'gas-dev-config/test';
+import { createGasLoader } from 'gasdev/test';
 
 interface GasLoggerInstance {
   info(msg: string, meta?: Record<string, unknown>): void;
@@ -328,16 +549,16 @@ export function loadGasLogger(globals: Record<string, unknown> = {}) {
 }
 ```
 
-The types ship as `test-loader/types.d.ts`, so consumers with `moduleResolution: bundler` (such as `gas-dev-config/tsconfig/test.json`) need no `allowJs`.
+The types ship as `test-loader/types.d.ts`, so consumers with `moduleResolution: bundler` (such as `gasdev/tsconfig/test.json`) need no `allowJs`.
 
-## Apps Script tests
+### Apps Script tests
 
-Unit tests with fakes cannot show how Sheets, `LockService` or `PropertiesService` really behave. `gas-dev-config gas-test` builds one self-contained script from the library's optional peers, the library, a small test runtime and your tests, so it can run in Apps Script.
+Use `gasdev gas-test` when you need to run tests inside Apps Script, because unit tests with fakes cannot show how Sheets, `LockService` or `PropertiesService` really behave. It builds one self-contained script from the library's optional peers, the library, a small test runtime and your tests, so it can run in Apps Script.
 
-### Layout
+#### Layout
 
 ```
-src/                      library, in gasDevConfig.loadOrder
+src/                      library, in gasdev.loadOrder
 gas-test/
   tsconfig.json
   sheets.ts               tests: global-scope TypeScript, no import/export
@@ -347,20 +568,20 @@ gas-test/
 
 ```json
 {
-  "extends": "gas-dev-config/tsconfig/gas-test.json",
+  "extends": "gasdev/tsconfig/gas-test.json",
   "include": ["../src/**/*.ts", "*.ts"]
 }
 ```
 
-The runtime's global declarations (`test`, `info`, `assert`, `runGasTests`, `GasTestContext`) come in through the preset's `types` entry `gas-dev-config/gas-test/runtime`, which TypeScript resolves from `node_modules`; no `/// <reference>` is needed. Add the check to `typecheck`, for example `tsc --noEmit && tsc -p gas-test/tsconfig.json --noEmit`. The `gas` ESLint preset lints `gas-test/` once `gas-test/tsconfig.json` exists.
+The runtime's global declarations (`test`, `info`, `assert`, `runGasTests`, `GasTestContext`) come in through the preset's `types` entry `gasdev/gas-test/runtime`, which TypeScript resolves from `node_modules`; no `/// <reference>` is needed. Add the check to `typecheck`, for example `tsc --noEmit && tsc -p gas-test/tsconfig.json --noEmit`. The `gas` ESLint preset lints `gas-test/` once `gas-test/tsconfig.json` exists.
 
-### Configuration
+#### Configuration
 
-`gasDevConfig.gasTest` requires `loadOrder`:
+`gasdev.gasTest` requires `loadOrder`:
 
 ```json
 {
-  "gasDevConfig": {
+  "gasdev": {
     "loadOrder": ["gas-lock.types.ts", "gas-lock.class.ts"],
     "gasTest": {
       "scopes": ["https://www.googleapis.com/auth/spreadsheets"],
@@ -370,11 +591,9 @@ The runtime's global declarations (`test`, `info`, `assert`, `runGasTests`, `Gas
 }
 ```
 
-- `scopes` is required: a non-empty array of unique strings, each starting with `https://www.googleapis.com/auth/`. They become the project's `oauthScopes`.
-- `scriptId` is optional; the `GAS_TEST_SCRIPT_ID` environment variable overrides it.
-- Unknown keys are rejected, naming their path.
+The `scopes` become the project's `oauthScopes`. The `GAS_TEST_SCRIPT_ID` environment variable overrides `scriptId`. The validation rules are in [The gasdev key](#the-gasdev-key).
 
-### Writing tests
+#### Writing tests
 
 ```ts
 // gas-test/sheets.ts
@@ -404,53 +623,57 @@ If none applies, the test that reads `spreadsheet` fails with an error naming al
 
 The runtime logs `PASS`, `FAIL` and `INFO` lines and a summary (`<p> passed, <f> failed, <i> info in <s> s`) to the execution log, and returns the results as `@@GAS_TEST@@<base64 JSON>@@END@@`.
 
-### Commands
+#### Commands
 
-With `gasTest` configured, `gas-dev-config check` requires these scripts with exactly these values. `typecheck` is a suggested addition and is only required to exist:
+With `gasTest` configured, `gasdev check` requires these scripts with exactly these values. `typecheck` is a suggested addition and is only required to exist:
 
 ```json
 {
   "scripts": {
     "typecheck": "tsc --noEmit && tsc -p gas-test/tsconfig.json --noEmit && echo '✓ TypeScript passed'",
-    "test:gas:build": "gas-dev-config gas-test build",
-    "test:gas": "gas-dev-config gas-test run"
+    "test:gas:build": "gasdev gas-test build",
+    "test:gas": "gasdev gas-test run"
   }
 }
 ```
 
-- `gas-dev-config gas-test build [--out <file>]` transpiles (without type-checking) the `loadOrder` files and `gas-test/*.ts`, bundles the `peers` with [`gas-dev-bundle`](https://github.com/yorsh-co/gas-dev-bundle) and writes the script to `--out`, by default `node_modules/.cache/gas-dev-config/gas-test.js`. The first line is a unique build stamp, because `clasp push --force` skips the push when every local file matches the remote.
-- `gas-dev-config gas-test run [--keep]` builds, pushes the script to the test project with clasp, runs `runGasTests` and prints one line per result and the summary. It exits `1` when a test fails or no results come back. With `--keep`, the temporary project directory is kept and its path printed. `GAS_TEST_SPREADSHEET_ID` is passed to `runGasTests`.
+- `gasdev gas-test build [--out <file>]` transpiles (without type-checking) the `loadOrder` files and `gas-test/*.ts`, bundles the `peers` with the [`bundle`](#bundle) module and writes the script to `--out`, by default `node_modules/.cache/gasdev/gas-test.js`. The first line is a unique build stamp, because `clasp push --force` skips the push when every local file matches the remote.
+- `gasdev gas-test run [--keep]` builds, pushes the script to the test project with clasp, runs `runGasTests` and prints one line per result and the summary. It exits `1` when a test fails or no results come back. With `--keep`, the temporary project directory is kept and its path printed. `GAS_TEST_SPREADSHEET_ID` is passed to `runGasTests`.
 
 > [!WARNING]
 > The test project must be dedicated to this purpose: `run` replaces its whole contents, including `appsscript.json`.
 
-### One-off setup
+#### One-off setup
 
 1. Create a dedicated Apps Script project and link it to a standard Google Cloud project (project settings), which `clasp run` requires.
-2. Install clasp: `npm install -D @google/clasp`.
-3. Authorize the scopes: `clasp login --extra-scopes <comma-separated gasTest.scopes>`.
+2. Install clasp (see [Requirements](#requirements)). `gas-test run` runs the clasp from the project's `node_modules`, not from `PATH`.
+3. Authorize the scopes: `npx clasp login --extra-scopes <comma-separated gasTest.scopes>`.
 4. Set `GAS_TEST_SCRIPT_ID` (or `gasTest.scriptId`) and, optionally, `GAS_TEST_SPREADSHEET_ID`.
 
-### Running from the editor
+#### Running from the editor
 
 Run `npm run test:gas:build`, paste the generated file into the Apps Script editor, select `runGasTests` and run it. The execution log shows the results.
 
-### Limits
+#### Limits
 
 - Apps Script stops an execution after 6 minutes; the run's sheets are then removed by the next run's stale-sheet sweep.
 - Runs share the project's script properties and spreadsheet, so do not run two at once.
 
-## HTML build
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-A library that ships an HtmlService UI edits it as `.html`, `.css` and TypeScript files, but Apps Script needs it as source files that gas-dev-bundle (`.js` only), git subtree, the Vitest loader and gas-dev-release already handle. `gas-dev-config html` inlines the page and writes it as a `.ts` file that declares the whole page as one string constant, listed in `loadOrder` like any other source.
+## Building
 
-### Configuration
+### HTML build
 
-`gasDevConfig.html` requires `loadOrder` and the `gas` preset:
+Use `gasdev html` in a library that ships an HtmlService UI. You edit the UI as `.html`, `.css` and TypeScript files. Apps Script serves HtmlService pages from strings or `.html` files, but gasdev's test loader and `gasdev release` handle `.ts` sources in `loadOrder`, and `gasdev bundle` and git subtree consume the compiled `.js`. So `gasdev html` inlines the page and writes it as a `.ts` file that declares the whole page as one string constant, listed in `loadOrder` like any other source.
+
+#### Configuration
+
+`gasdev.html` requires `loadOrder` and the `gas` preset:
 
 ```json
 {
-  "gasDevConfig": {
+  "gasdev": {
     "loadOrder": ["generated/gas-config.ui.html.ts", "gas-config.ui.ts"],
     "html": [
       {
@@ -469,122 +692,210 @@ A library that ships an HtmlService UI edits it as `.html`, `.css` and TypeScrip
 | `out`   | Relative POSIX path under `src/` ending in `.ts` but not `.d.ts`. Its path relative to `src/` must be in `loadOrder`, otherwise it is drift |
 | `name`  | A valid JavaScript identifier for the constant                                                                                              |
 
-The array is non-empty, `out` and `name` are unique across entries, and unknown keys are errors naming their path.
+The validation rules are in [The gasdev key](#the-gasdev-key).
 
-### Rules
+#### Rules
 
 For each entry, the HTML is read and:
 
 1. `<link rel="stylesheet" href="...">` with a local `href` becomes `<style>` holding the file's contents. Only `media` is kept from its attributes.
-2. `<script src="..."></script>` with a local `src` becomes `<script>` holding the code, with its other attributes kept. If the `src` names a `.js` file and a `.ts` file with the same path and base name exists, the `.ts` is transpiled with the project's TypeScript (`transpileModule`, target ES2020, no module system: browser code is a classic global script) and not type-checked; run `tsc` for that, for example with `tsconfig/web.json`. Otherwise the `.js` is inlined as is. A missing file is an error naming its path, so `--check` needs no prior compile step.
+2. `<script src="..."></script>` with a local `src` becomes `<script>` holding the code, with its other attributes kept. If the `src` names a `.js` file and a `.ts` file with the same path and base name exists, the `.ts` is transpiled with the project's TypeScript (`transpileModule`, target ES2020, no module system: browser code is a classic global script: no `import` or `export`, and the code runs in the page's global scope) and not type-checked; run `tsc` for that, for example with `tsconfig/web.json`. Otherwise the `.js` is inlined as is. A missing file is an error naming its path, so `--check` needs no prior compile step.
 3. References resolve relative to the directory of the entry. Absolute URLs (`http:`, `https:`, any other scheme such as `data:`) and protocol-relative `//` references are left untouched; a root-relative one (`/x.js`) is an error.
 4. Any element with a `data-dev-only` attribute is removed with its content, for example a mock server script.
 5. Inlined code containing `</script` (case-insensitive) in a script, or `</style` in a stylesheet, is an error naming the source file, because the browser would end the element there. `<?` is allowed: the page must be served with `HtmlService.createHtmlOutput()`, not as a template, so no inlined code is evaluated as a scriptlet.
 
 Tags are found with a small scanner rather than an HTML parser. It handles attributes in any order, single, double and unquoted values, self-closing `<link />`, any tag case and multiline tags, and does not touch anything inside HTML comments, inline `<script>` and `<style>` elements or elements without a local reference.
 
-### Limitations
+#### Limitations
 
 - `url(...)` references in inlined CSS are not rewritten, so use absolute URLs or `data:` URIs.
 - Attribute entities are not decoded.
 - Root-relative references (`/x.js`) are errors, as is a direct `<script src="x.ts">`: reference `x.js` and the `.ts` source is transpiled.
 - A `<script src>` body is dropped.
 
-### The generated file
+#### The generated file
 
 ```ts
-// Generated by `gas-dev-config html` from src/web/gas-config.ui.html. Do not edit.
+// Generated by `gasdev html` from src/web/gas-config.ui.html. Do not edit.
 // prettier-ignore
 const _GAS_CONFIG_UI_HTML: string = "<!doctype html>...";
 ```
 
 The page is escaped with `JSON.stringify`, so the output is byte-stable: LF line endings and a trailing newline. `// prettier-ignore` keeps Prettier from rewriting the quotes. Directories are created as needed.
 
-### Commands
+#### Commands
 
 ```
-gas-dev-config html [--check]
+gasdev html [--check]
 ```
 
-- `gas-dev-config html` writes every `out` and prints `✓ Generated <out>`.
-- `--check` writes nothing: it rebuilds in memory and compares with the file on disk. For each stale or missing file it prints `<out> is out of date: run gas-dev-config html` to stderr and exits `1`; otherwise it prints `✓ HTML build is up to date`.
+- `gasdev html` writes every `out` and prints `✓ Generated <out>`.
+- `--check` writes nothing: it rebuilds in memory and compares with the file on disk. For each stale or missing file it prints `<out> is out of date: run gasdev html` to stderr and exits `1`; otherwise it prints `✓ HTML build is up to date`.
 - A build error, or `html` not configured, exits `1`.
-- `gas-dev-config check` runs the same comparison when `html` is configured and reports it as drift.
+- `gasdev check` runs the same comparison when `html` is configured and reports it as drift.
 
-### Workflow
+#### Workflow
 
-1. Make `build:frontend` run `gas-dev-config html` after the frontend compile, for example `tsc -p tsconfig.frontend.json && gas-dev-config html`.
+1. Make `build:frontend` run `gasdev html` after the frontend compile, for example `tsc -p tsconfig.frontend.json && gasdev html`.
 2. Commit the generated file: tests, Apps Script tests and type-checking load it from `loadOrder`.
-3. `npm run check` fails with drift when it is stale, because `gas-dev-config check` is part of it. No script of the project is required by this feature.
+3. `npm run check` fails with drift when it is stale, because `gasdev check` is part of it. No script of the project is required by this feature.
 
-## Config check
-
-Prettier, TypeScript and ESLint are shared through their own extension mechanisms. Four things have none, so `gas-dev-config check` compares them with templates and reports the drift:
+#### Local development
 
 ```
-gas-dev-config check [--fix]
-gas-dev-config init
+gasdev dev [--port <n>]
 ```
 
-It reads the project in the current directory and writes nothing unless `--fix` is given. A passing run prints `✓ Config check passed`; otherwise the drift is listed per file on stderr, followed by `✗ Config check failed: N issue(s) in M file(s)`.
+`gasdev dev` serves every `gasdev.html` entry on `http://127.0.0.1:<port>` (default `5173`) and prints the URL. With one entry, `/` is the page; with several, `/` is an index linking `/<entry>` for each. It binds to `127.0.0.1` only and has no host option. `--port` is valid only with `dev` and must be an integer from 1 to 65535.
 
-`--fix` appends the template lines missing from `.gitignore` and `.prettierignore`, and creates either file from the template if it does not exist. Existing lines, comments and line endings (LF or CRLF) are kept; missing entries go at the end in template order. Each change is printed on stdout as `<file>: added <entry>` or `<file>: created`. Other drift (dependabot, scripts, `loadOrder`, html) stays report-only, and the exit code reflects the drift remaining afterwards. After upgrading `gas-dev-config`, run `npx gas-dev-config check --fix` to pick up new template lines.
+The page is the same inlined document `gasdev html` builds, rebuilt on every request. `dev` writes no `out` file: `gasdev html` remains the only writer.
 
-`init` scaffolds a new project. It applies the same ignore-file fix as `--fix`, creates `.github/dependabot.yml` from the template when the file is absent, and adds the required scripts that are missing (plus the `gasTest` ones when `gasTest` is configured) at the end of `scripts`, in template order. It never overwrites or changes an existing file or script, and a project that is already complete is left untouched. Scripts that only have to be present (`build`, `build:watch` and `typecheck` on `gas`) have no template value, so they stay manual and `check` keeps reporting them. `package.json` and `gasDevConfig` are validated first, so an invalid config writes nothing. Each change is printed on stdout as `<file>: created`, `<file>: added <entry>` or `package.json: added scripts.<name>`, followed by the normal check report; the exit code reflects the drift remaining afterwards.
+- **Reload:** changing any file under the directory of an entry (recursively) reloads the open tab after a short debounce. A reload is a full page reload, not hot module replacement.
+- **TypeScript:** a `.ts` source is transpiled on each request, but not type-checked or compiled to `.js` on disk. Run `tsc --watch` for type errors.
+- **Build errors:** a failed build, such as a missing `<script src>` file, is shown in the tab instead of stopping the server. Fixing the file reloads the tab.
+- **Dev-only elements:** unlike the production build, elements with `data-dev-only` are kept, so the page can run without Apps Script. Use one to mock `google.script.run`:
 
-| Option         | Description                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------------- |
-| `--fix`        | `check` only: append missing template lines to `.gitignore` and `.prettierignore` (creating them) |
-| `-h`, `--help` | Show usage                                                                                        |
-| `--version`    | Show the version                                                                                  |
+```html
+<script data-dev-only src="mock-server.js"></script>
+```
 
-`gas-dev-config html [--check]` is described in [HTML build](#html-build).
+```js
+// mock-server.js
+if (!window.google) {
+  window.google = {
+    script: {
+      run: {
+        withSuccessHandler(onSuccess) {
+          return {
+            getConfig() {
+              onSuccess({ name: 'demo' });
+            },
+          };
+        },
+      },
+    },
+  };
+}
+```
 
-Exit codes: `0` when the project matches, `1` on drift or an unusable `package.json`, `2` on invalid usage (a missing or unknown command, an unknown option).
+Limits:
 
-### Presets
+- Server-side code does not run: Apps Script services such as `SpreadsheetApp` have no local equivalent, so `google.script.run` must be mocked.
+- Only HtmlService pages are served.
+- When an entry sits at the project root, the watch also covers `node_modules` and `.git`.
 
-The preset is read from `package.json` and defaults to `gas`. Set it to `node` for plain JavaScript tooling:
+### Bundle
+
+Use `gasdev bundle` in an Apps Script project that uses several libraries: it bundles gas-\* libraries from their `dist/vX.Y.Z` tags into one global script file.
+
+- Resolves each library to the highest `dist/vX.Y.Z` tag that satisfies a semver range, so upgrades are a version bump instead of a `git subtree pull`
+- Orders libraries by their declared load order, with peers before the libraries that use them
+- Reproducible output: no timestamps, and a header recording each library's version and full commit SHA
+- Validates the bundle with `node --check` before writing anything; optional concatenated `.d.ts` file for the libraries' global declarations
+
+Requirements: libraries released with `gasdev release` and `loadOrder`, so each tag carries `gasLibrary` metadata; git access to the libraries' repositories.
+
+#### Configuration
+
+Configure the libraries in the project's `package.json`, then run `gasdev bundle` in the project root:
 
 ```json
 {
-  "gasDevConfig": {
-    "preset": "node"
+  "gasdev": {
+    "bundle": {
+      "libraries": {
+        "gas-sheetdb": "^2.1.0",
+        "gas-lock": {
+          "version": "^1.2.0",
+          "repository": "https://github.com/me/gas-lock.git"
+        }
+      },
+      "outFile": "src/lib/gas-libraries.js",
+      "typesFile": "types/gas-libraries.d.ts"
+    }
   }
 }
 ```
 
-`loadOrder`, `peers`, `gasTest` and `html` are also read from `gasDevConfig`, for the `gas` preset only. Any other key or preset value is an error.
+| Key         | Type   | Default                | Description                                                                    |
+| ----------- | ------ | ---------------------- | ------------------------------------------------------------------------------ |
+| `libraries` | object | required               | Non-empty map of library name to a semver range, or `{ version, repository? }` |
+| `outFile`   | string | `src/gas-libraries.js` | Bundle path, relative to the project root; no `..`; must end in `.js`          |
+| `typesFile` | string | none                   | Declarations path, relative to the project root; no `..`; must end in `.d.ts`  |
+
+`repository` defaults to `https://github.com/yorsh-co/<name>.git`. The validation rules are in [The gasdev key](#the-gasdev-key).
+
+`gasdev bundle` takes only `-h`/`--help` and `--version`. It prints one line per bundled library (name, version, short SHA, docs link), the written paths and a reminder about load order.
+
+| Code | Meaning                       |
+| ---- | ----------------------------- |
+| `0`  | The bundle was written        |
+| `1`  | Failure (`gasdev: <message>`) |
+| `2`  | Invalid usage                 |
+
+> [!IMPORTANT]
+> Apps Script loads files in `filePushOrder` or, by default, alphabetically. `outFile` must load before any project code that uses the library globals at top level.
+
+#### How versions are resolved
+
+For each library `gasdev bundle` runs `git ls-remote --tags --refs <repository> 'refs/tags/dist/v*'`, parses the `dist/vX.Y.Z` tags (tags that are not valid semver are ignored) and picks `semver.maxSatisfying` for the range. If nothing matches, the error names the library, the range and the available versions. The chosen tag is fetched with a shallow clone and its commit SHA is recorded in the bundle header. Prereleases are only considered when the range itself names one.
+
+#### Load order and peers
+
+Each library's `package.json` on its dist tag declares how it loads:
 
 ```json
 {
-  "gasDevConfig": {
-    "loadOrder": ["gas-sheet-db.types.ts", "gas-sheet-db.class.ts"],
-    "peers": { "gas-logger": "^1.2.0" }
+  "name": "gas-sheetdb",
+  "version": "2.1.0",
+  "gasLibrary": {
+    "loadOrder": ["gas-sheetdb.errors.js", "sub/x.js"],
+    "peers": { "gas-lock": "^1.1.0" }
   }
 }
 ```
 
-- `loadOrder` is the single source of truth for the order in which the global-scope files under `src/` load. Use it in tests with [`loadOrderFiles`](#load-order-from-packagejson).
-  - A non-empty array of unique, non-empty strings.
-  - Each entry is a relative POSIX path under `src/` (no leading `/`, no backslashes, no `.` or `..` segments) ending in `.ts` but not `.d.ts`.
-  - A listed file that does not exist is reported as drift: `gasDevConfig.loadOrder: src/<entry> does not exist`.
-- `peers` lists sibling libraries that are used when present, mapped to version ranges.
-  - An object whose keys are package names matching `/^[a-z0-9][a-z0-9._-]*$/`.
-  - Each value is a non-empty string; ranges are not parsed.
-- `gasTest` configures [Apps Script tests](#apps-script-tests).
-  - An object with the keys `scopes` and `scriptId`; any other key is an error naming its path.
-  - `scopes` is a non-empty array of unique strings starting with `https://www.googleapis.com/auth/`; `scriptId` is an optional non-empty string.
-  - It requires `loadOrder`.
-- `html` configures the [HTML build](#html-build).
-  - A non-empty array of objects with the keys `entry`, `out` and `name`; any other key is an error naming its path.
-  - `out` and `name` are unique. Missing entry files, stale or missing generated files, and an `out` absent from `loadOrder` are reported as drift.
-  - It requires `loadOrder`.
-- Any of these keys with the `node` preset is an error.
+- `loadOrder` is required: a non-empty list of relative `.js` paths that exist in the tag. The package `name` must equal the configured name.
+- `peers` are optional libraries used when present. A configured peer whose resolved version does not satisfy the range prints a warning to stderr and the bundle is still written.
+- Libraries are ordered topologically by peers; ties keep the config order. A cycle is an error naming the libraries involved.
+
+Every file is emitted under a `// ---- <library>/<path> ----` marker with its `"use strict";` lines removed, because directives mid-file have no effect in a concatenated script. A single `'use strict';` follows the header instead.
+
+```js
+// Generated by gasdev bundle — do not edit. Run `npx gasdev bundle` to update.
+// gas-lock 1.2.0 (<full sha>)
+//   https://github.com/yorsh-co/gas-lock/tree/dist/v1.2.0
+
+'use strict';
+
+// ---- gas-lock/gas-lock.constants.js ----
+```
+
+With `typesFile` set, every `.d.ts` file in each library is concatenated under the same header and per-file markers. Include the file in your `tsconfig.json` so the globals are declared in your project.
+
+#### Cache
+
+Fetched libraries are cached in `<project>/node_modules/.cache/gasdev/bundle/<name>@<version>/`. A fetch clones into a temporary sibling directory, records the commit SHA in `.gasdev-bundle.json`, removes `.git` and renames the directory into place, so an interrupted fetch never looks cached. A complete entry fetched from the same repository is reused; delete the directory to force a fresh fetch. Version resolution always queries the remote.
+
+#### Programmatic API
+
+```js
+import { bundle, loadConfig } from 'gasdev/bundle';
+
+const { code, types, resolved } = bundle({
+  libraries: { 'gas-lock': '^1.2.0' },
+  cwd: process.cwd(),
+  extraFiles: ['/abs/path/dist/my-lib.js'],
+});
+```
+
+`libraries` has the shape of `gasdev.bundle.libraries`; `cwd` defaults to `process.cwd()`; `cacheDir` to `<cwd>/node_modules/.cache/gasdev/bundle`; `extraFiles` are absolute `.js` paths appended after the libraries; `warn` receives peer warnings (default: stderr). `bundle()` returns `{ code, types, resolved }` and writes nothing outside the cache; `loadConfig(cwd)` returns the validated `gasdev.bundle`. Failures throw `BundleError`.
+
+Do not vendor a library with `git subtree` and bundle it too: its globals would be declared twice.
 
 ### Peer types
 
-`gas-dev-config peers sync [--check]` keeps `src/internal/<peer>.peer.types.d.ts` in step with the libraries listed in `gasDevConfig.peers`.
+Use `gasdev peers sync [--check]` in a library with peers: it keeps `src/internal/<peer>.peer.types.d.ts` in step with the libraries listed in `gasdev.peers`.
 
 - For each peer it lists the `vX.Y.Z` tags of `https://github.com/yorsh-co/<peer>.git`, picks the highest one that satisfies the range, and reads `peer/<peer>.peer.types.d.ts` at that tag. Other tags, such as `dist/vX.Y.Z`, are ignored.
 - The file is written to `src/internal/` byte for byte, except that the ` * @version` line is removed. A peer patch release that leaves the declarations unchanged therefore produces no diff.
@@ -595,73 +906,260 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
 ```json
 {
   "scripts": {
-    "peers:sync": "gas-dev-config peers sync",
-    "peers:check": "gas-dev-config peers sync --check"
+    "peers:sync": "gasdev peers sync",
+    "peers:check": "gasdev peers sync --check"
   }
 }
 ```
 
-### What is checked
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-| File                     | Rule                                                                                                                                                                      |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.gitignore`             | Every line of the template is present. Extra lines, blanks and comments are allowed                                                                                       |
-| `.prettierignore`        | Every line of the template is present. Extra lines, blanks and comments are allowed                                                                                       |
-| `.github/dependabot.yml` | Equals the template (ignoring trailing whitespace and final newlines)                                                                                                     |
-| `package.json` `scripts` | Required scripts have exactly the template value; present scripts must exist with any value. With `gasTest` configured, `test:gas:build` and `test:gas` are also required |
+## Releasing
 
-Required lines per preset:
+### Release
 
-| File              | `gas`                                                                                                       | `node`                                                                                             |
-| ----------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `.gitignore`      | `node_modules/`, `dist/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` | `node_modules/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` |
-| `.prettierignore` | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`                       | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`              |
+Use `gasdev release` to publish the build of a gas-\* library to its [dist branch](#key-terms)(es) with tags, so consumers can `git subtree` the compiled output without any TypeScript or ESLint tooling.
 
-Required scripts, exact values, for the `gas` preset. They assume `rimraf` and [`gas-dev-release`](https://github.com/yorsh-co/gas-dev-release) are dev dependencies of the project:
+- Zero configuration for single-target libraries; multi-target projects (for example a backend branch plus a web client branch) are configured per target
+- Multi-target releases are all-or-nothing: every branch and tag is pushed in a single atomic `git push`
+- Targets without changes are skipped with a notice and get no commit or tag
+- Consistent `v`-prefixed tags: version tags `vX.Y.Z`, release tags `<branch>/vX.Y.Z`
+- Preflight checks before anything is touched: clean working tree, `vX.Y.Z` at `HEAD`, peer declarations' `@version` matching `package.json`, build present, release tags absent locally and on the remote
+- Never ships `*.types.js` (by default) and removes stale or hidden files already on the dist branch
+- Generates a trimmed `package.json` for the dist branch
+- `--dry-run` shows the staged diff per target and restores the worktrees; `--target` releases a subset
+- Unknown configuration keys fail with the offending key path (see [The gasdev key](#the-gasdev-key))
 
-| Script          | Value                                                                                               |
-| --------------- | --------------------------------------------------------------------------------------------------- |
-| `clean`         | `rimraf dist`                                                                                       |
-| `release`       | `gas-dev-release`                                                                                   |
-| `build:format`  | `npm run check && npm run build && npm run format:dist`                                             |
-| `build:release` | `npm run build:format && npm run release`                                                           |
-| `lint`          | `eslint . && echo '✓ Lint passed'`                                                                  |
-| `lint:fix`      | `eslint . --fix`                                                                                    |
-| `format`        | `prettier . --write`                                                                                |
-| `format:dist`   | `prettier ./dist --write --ignore-path .prettierignore`                                             |
-| `format:check`  | `prettier . --check`                                                                                |
-| `check`         | `npm run format:check && npm run lint && npm run typecheck && npm run test && gas-dev-config check` |
-| `test`          | `vitest run`                                                                                        |
-| `test:watch`    | `vitest`                                                                                            |
+A release runs in three steps: `npm run check` (presets, tests and `gasdev check`), `npm run test:gas` on the git-flow release branch (Apps Script tests, manual), then `npm run build:release` (build, then `gasdev release`).
 
-The `gas` preset also requires `build`, `build:watch` and `typecheck` to exist, with any value. With `gasTest` configured it also requires `test:gas:build` (`gas-dev-config gas-test build`) and `test:gas` (`gas-dev-config gas-test run`).
+Requirements:
 
-For the `node` preset the required scripts are `typecheck` (`tsc --noEmit && echo '✓ TypeScript passed'`), `lint`, `lint:fix`, `format`, `format:check`, `check`, `test` and `test:watch`, with the same values as above. No script is merely required to be present.
+- git with `git worktree` support
+- a git-flow-style version tag `vX.Y.Z` (matching `version` in `package.json`) pointing at `HEAD`
+- the build output (default `dist/`) already built, with at least one `.js` file
+- a remote (default `origin`) that receives the dist branches and tags, which must be the canonical (GitHub) remote
+- [GitHub CLI](https://cli.github.com) (`gh`), only when `githubRelease` is on
 
-Add the check to your `check` script, as in the values above, so `npm run check` fails on drift.
+The version tag is created by git-flow. Configure it once per clone so `git flow release finish` creates `vX.Y.Z`:
 
-## Dependabot
-
-Keep dependencies current with one weekly grouped pull request for development dependencies. This is the `.github/dependabot.yml` that `gas-dev-config check` enforces, for both presets:
-
-```yaml
-version: 2
-updates:
-  - package-ecosystem: npm
-    directory: /
-    target-branch: develop
-    schedule:
-      interval: weekly
-    groups:
-      dev-dependencies:
-        dependency-type: development
-        patterns:
-          - '*'
+```bash
+git config gitflow.prefix.versiontag v
 ```
 
-## GitHub rulesets
+Add a `release` script (the `gas` preset requires it, see [What is checked](#what-is-checked)):
 
-`gas-dev-config github` keeps the repository rulesets the same in every gas-\* repo. Two rulesets, `branches` and `tags`, come from templates shipped with this package:
+```json
+{
+  "scripts": {
+    "release": "gasdev release",
+    "build:release": "npm run build:format && npm run release"
+  }
+}
+```
+
+#### Release usage
+
+```text
+gasdev release [--dry-run] [--target <branch>]...
+```
+
+| Option              | Description                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `--dry-run`         | Run all checks, stage the release and show the diff per target; commit, tag and push nothing |
+| `--target <branch>` | Release only the given target. Repeatable; default: all configured targets                   |
+| `-h`, `--help`      | Show usage                                                                                   |
+| `--version`         | Show the version                                                                             |
+
+| Code | Meaning                                                                                                         |
+| ---- | --------------------------------------------------------------------------------------------------------------- |
+| `0`  | Released                                                                                                        |
+| `1`  | The release was refused or failed; nothing was pushed                                                           |
+| `2`  | Invalid usage (an unknown option or a positional argument)                                                      |
+| `3`  | Released and pushed, but the GitHub Release was not created (see [Failure recovery](#release-failure-recovery)) |
+
+```bash
+npm run release -- --dry-run               # preview every target
+npm run release -- --target dist-web       # release one branch of a multi-target project
+npm run release -- --dry-run --target dist
+npm run release                            # release
+```
+
+##### What a release does
+
+Run it from the released commit, after `git flow release finish` and the build:
+
+1. **Preflight**, before anything is modified. It checks that:
+   - the working tree is clean (`gasdev`'s own `.worktrees/` is ignored)
+   - `vX.Y.Z` exists and points at `HEAD`
+   - the `@version` header of `peer/<name>.peer.types.d.ts` (when that file exists) equals `package.json`'s `version`
+   - every target's build directory contains a `.js` file
+   - every `files` and `include` source exists
+   - `<branch>/vX.Y.Z` exists neither locally nor on the remote
+
+   With `githubRelease` on, it also requires a GitHub remote, `vX.Y.Z` on the remote at the same commit, a working authenticated `gh` and the rulesets described under [GitHub Release](#github-release). Bump the `@version` header in the git-flow release branch together with the version, because the check runs on the tagged commit.
+
+2. **Sync**: for each target, fetches `<remote>/<branch>` if it exists and prepares a worktree at `.worktrees/<branch>` (reusing it, checking out the local branch, tracking the remote branch, or creating an orphan branch for a first release). The local branch is fast-forwarded to the remote; if it has commits the remote lacks, the release is refused.
+3. **Stage**: clears the worktree, copies the build minus `exclude` and `hide`, the `include` trees, the `files` and the generated `package.json`, then runs `git add -A`.
+4. **Guard**: fails with "Nothing to release" when no target has staged changes. Targets without changes are skipped and get no tag.
+5. **Commit and tag** each changed target: commit `merge: vX.Y.Z`, tag `<branch>/vX.Y.Z`.
+6. **Push** all changed branches and tags once, atomically (`git push --atomic`).
+7. **GitHub Release** (opt-in, `githubRelease`): creates a GitHub Release for `vX.Y.Z` after the push, unless one (or a draft) already exists.
+
+##### Tags
+
+| Tag               | Created by       | Points at                        |
+| ----------------- | ---------------- | -------------------------------- |
+| `vX.Y.Z`          | git-flow         | the released commit on `main`    |
+| `<branch>/vX.Y.Z` | `gasdev release` | the release commit on `<branch>` |
+
+For the default target the release tag is `dist/vX.Y.Z`.
+
+##### Dry run
+
+`--dry-run` performs the preflight, the sync and the staging exactly as a real run, prints `git diff --cached --stat` for each changed target (or the "No changes — skipped" notice), and then restores each worktree: `git reset --hard` and `git clean -fdx` for an existing branch; for a first release, the empty worktree is removed and no local branch is left behind.
+
+A dry run never commits, tags or pushes. Like a real run it fetches the remote branch and fast-forwards the local dist branch to it, so those local ref updates remain. It exits `1` with "Nothing to release" in the same situations as a real run, so CI can detect it.
+
+With `githubRelease` on, the dry run also reports the GitHub Release outcome (would be created, already exists (skipped), or a draft exists (skipped)) and refuses repositories that do not meet the [ruleset requirement](#github-release).
+
+#### Release configuration
+
+Configuration is optional and lives under the `release` key of `gasdev` in your `package.json`. Without it, a single `dist` target with the defaults below is used.
+
+```jsonc
+"gasdev": {
+  "release": {
+    "remote": "origin",
+    "targets": [ { "branch": "dist" } ]
+  }
+}
+```
+
+| Key             | Default                  | Description                                                                                                     |
+| --------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `remote`        | `"origin"`               | Remote that receives the branches and tags                                                                      |
+| `targets`       | `[{ "branch": "dist" }]` | Non-empty list of release targets; branches must be unique                                                      |
+| `githubRelease` | `false`                  | After the push, create a GitHub Release for `vX.Y.Z` (requires `gh`, authenticated, and `vX.Y.Z` on the remote) |
+
+##### GitHub Release
+
+`gasdev release` does not push `vX.Y.Z`; push it yourself (`git push <remote> vX.Y.Z`) before releasing. The remote must be a `github.com` repository; an SSH host alias for github.com (such as `github:owner/repo.git` with a `Host github` entry in `~/.ssh/config`) is resolved with `ssh -G`.
+
+- **Notes**: the `## [X.Y.Z]` section of `CHANGELOG.md` (`[vX.Y.Z]` is also accepted). If there is none, the tag annotation is used, and otherwise the title `vX.Y.Z`.
+- **Auth**: `gh auth login` locally, or `GH_TOKEN`/`GITHUB_TOKEN` in CI.
+- **Existing releases**: if a Release for `vX.Y.Z` exists, it is left untouched. A draft counts as existing, so publish or delete it yourself.
+- **Rulesets**: every target branch needs `deletion` and `non_fast_forward`, and an active tag ruleset on `~ALL` (no exclusions) needs `deletion`, `non_fast_forward` and `update`. Organization rulesets count. Run `npx gasdev github --fix` (needs admin rights) to apply them; see [GitHub rulesets](#github-rulesets).
+
+##### Target fields
+
+Each target is merged over these defaults. Paths are relative to the project root unless noted.
+
+| Field         | Default                                       | Description                                                                                              |
+| ------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `branch`      | required                                      | Dist branch; also the tag prefix (`<branch>/vX.Y.Z`)                                                     |
+| `from`        | `"dist"`                                      | Build directory copied to the branch root                                                                |
+| `hide`        | `["*.types.js"]`                              | Globs of files that are never shipped; removed if already on the branch                                  |
+| `exclude`     | `[]`                                          | Globs of `from` subpaths skipped entirely, e.g. `"web/"`                                                 |
+| `include`     | `[]`                                          | Extra build trees: `{ "from", "to", "hide" }`, copied from `from` to `to` (relative to the branch root)  |
+| `files`       | `["README.md", "LICENSE.md", "CHANGELOG.md"]` | Project files copied into the branch; `"src:dest"` renames. Replaces the default list                    |
+| `packageJson` | `true`                                        | Write the trimmed `package.json` (name, version, description, license, author, repository, `gasLibrary`) |
+
+The validation rules are in [The gasdev key](#the-gasdev-key).
+
+##### Library metadata
+
+Libraries declare their load order, and optionally their peer libraries, in the `gasdev` key of `package.json` (next to `release`), which `gasdev check` validates (see [The gasdev key](#the-gasdev-key)):
+
+```jsonc
+"gasdev": {
+  "loadOrder": ["gas-sheetdb.types.ts", "gas-sheetdb.errors.ts", "internal/x.ts"],
+  "peers": { "gas-lock": "^1.1.0" }
+}
+```
+
+When `loadOrder` is set, every target with `packageJson: true` gets a `gasLibrary` block after the other fields of its release `package.json`:
+
+```jsonc
+"gasLibrary": {
+  "loadOrder": ["gas-sheetdb.errors.js", "internal/x.js"],
+  "peers": { "gas-lock": "^1.1.0" }
+}
+```
+
+- Each `x.ts` entry becomes `x.js`, relative to the target's `from` directory.
+- Entries the target does not ship (matched by `hide` or `exclude`, including through an excluded directory) are dropped, which is why `gas-sheetdb.types.js` is absent above.
+- A built `.js` file that does not exist is a preflight error; so is a load order where every entry is dropped.
+- `peers` is copied as is and omitted when not configured. Without `loadOrder`, no `gasLibrary` block is written.
+- A dry run lists the shipped files per target.
+
+##### Glob semantics
+
+`hide` and `exclude` patterns are gitignore-like and match `/`-separated paths relative to the copied directory:
+
+- `*` matches any characters except `/`; `?` matches one character except `/`
+- `**` matches any characters including `/`; `**/` also matches zero directories
+- A pattern without `/` matches the file name at any depth (`*.types.js` matches `a/b/x.types.js`)
+- A pattern with `/` is matched against the whole relative path (`shared/*.js`)
+- A trailing `/` matches directories only (`web/` skips a `web` directory, not a file named `web`)
+
+`hide` matches files only; `exclude` matches files and directories.
+
+##### Example: gas-webapp
+
+A backend branch and a web client branch, released together:
+
+```json
+{
+  "gasdev": {
+    "release": {
+      "targets": [
+        {
+          "branch": "dist",
+          "hide": ["**/types/*.js", "shared/*.js"],
+          "exclude": ["web/"]
+        },
+        {
+          "branch": "dist-web",
+          "from": "dist/web",
+          "hide": ["**/types/*.js"],
+          "include": [
+            { "from": "dist/shared", "to": "shared", "hide": ["*.js"] }
+          ],
+          "files": [
+            "src/web/README.md:README.md",
+            "LICENSE.md",
+            "CHANGELOG.md"
+          ],
+          "packageJson": false
+        }
+      ]
+    }
+  }
+}
+```
+
+This publishes `dist` (the backend, without `web/`) and `dist-web` (the client, plus the shared type declarations and its own README), tagged `dist/vX.Y.Z` and `dist-web/vX.Y.Z`.
+
+#### Release failure recovery
+
+Run `--dry-run` first; it surfaces most problems without touching any ref.
+
+If the final push is rejected, nothing reached the remote, but the local release commits and tags are kept. The error message lists the commands, to run from the project root, to either:
+
+- retry the push: `git push --atomic <remote> <branches and tags>`
+- discard the local release: delete the tags with `git tag -d`, then reset each existing branch with `git -C .worktrees/<branch> reset --hard <remote>/<branch>`, or, for a branch that was never published, remove it with `git worktree remove --force .worktrees/<branch> && git branch -D <branch>`
+
+Because the push is atomic, a multi-target release is never left half-published.
+
+If `githubRelease` is on and the push succeeded but the GitHub Release could not be created, `gasdev release` exits `3`. The push is kept and nothing is rolled back. The notes are written to `.worktrees/github-release-vX.Y.Z.md`, and the error message prints the exact command to retry from the project root:
+
+```bash
+gh release create vX.Y.Z -R owner/repo --verify-tag --title vX.Y.Z --notes-file .worktrees/github-release-vX.Y.Z.md
+```
+
+### GitHub rulesets
+
+Use `gasdev github` to keep the repository rulesets the same in every gas-\* repo. Two rulesets, `branches` and `tags`, come from templates shipped with this package:
 
 - `branches`: the default branch, `develop`, `dist` and `dist-web` cannot be deleted or force-pushed.
 - `tags`: tags cannot be deleted or moved, but can be created, so `vX.Y.Z` and `<branch>/vX.Y.Z` tags still work.
@@ -669,30 +1167,410 @@ updates:
 Requirements: [GitHub CLI](https://cli.github.com) installed and authenticated (`gh auth login`), and admin rights on the repository for `--fix`.
 
 ```sh
-npx gas-dev-config github         # report drift against the templates
-npx gas-dev-config github --fix   # create missing rulesets and update drifted ones
+npx gasdev github         # report drift against the templates
+npx gasdev github --fix   # create missing rulesets and update drifted ones
 ```
 
-Exit codes: `0` in sync (or fixed), `1` drift or failure, `2` usage error. Rulesets that are not in the template are reported but never changed or deleted. The command is not part of `check`, which stays offline. See [ADR 0009](docs/adr/0009-github-rulesets.md).
+| Code | Meaning            |
+| ---- | ------------------ |
+| `0`  | In sync (or fixed) |
+| `1`  | Drift or failure   |
+| `2`  | Usage error        |
 
-## Migrating a gas-\* project
+The release requirement for these rulesets is stated under [GitHub Release](#github-release). Rulesets that are not in the template are reported but never changed or deleted. The command is not part of `check`, which stays offline. See [ADR 0009](docs/adr/0009-github-rulesets.md).
 
-1. Add `gas-dev-config` and the peer dependencies to `devDependencies` (see [Install](#install)).
-2. Set `"prettier": "gas-dev-config/prettier"` in `package.json` and delete `.prettierrc.json`.
-3. Replace the options of `tsconfig.json` and `tsconfig.test.json` with an `extends` of the matching preset, keeping `rootDir`, `outDir` and `include` local (see [TypeScript](#typescript)).
-4. Replace `eslint.config.js` with `gasEslint(...)` (see [ESLint](#eslint)).
-5. Remove `@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` from `devDependencies`.
-6. Run `npx gas-dev-config init` to add `.github/dependabot.yml`, the ignore lines and the missing required scripts.
-7. For plain JavaScript tooling, add `"gasDevConfig": { "preset": "node" }` to `package.json`.
-8. Add `gas-dev-config check` to the `check` script (if `init` added it, this is already done) and align the scripts `init` did not change with what the check reports.
-9. Run `npm install`.
-10. Run `npm run check`. It must pass with no source changes: `prettier --check`, `eslint` and `tsc` are clean.
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Deploy a web app
+
+`gasdev setup` creates the Apps Script project and the first web app deployment interactively. `gasdev deploy` then pushes and redeploys from GitHub Actions through the reusable `gas-deploy` workflow. Both use the clasp in the project's `node_modules`.
+
+<a id="requirements-and-install"></a>
+
+### Deploy requirements
+
+- A project with `npm run check` and `npm run build` scripts (or custom commands, see [Workflow inputs](#workflow-inputs-and-outputs)) and a built `<rootDir>/appsscript.json`
+- A GitHub environment per target, with the secret and variables below
+- The Apps Script API enabled at https://script.google.com/home/usersettings
+- `@google/clasp` as a dev dependency (see [Requirements](#requirements))
+
+The workflow runs `gasdev` with `npx --no-install`, so a missing dependency fails instead of fetching an unrelated package. Add a script for the wizard:
+
+```json
+{ "scripts": { "deploy:setup": "gasdev setup" } }
+```
+
+The workflow is referenced by an exact tag (`@v3.0.0`) and `gasdev` by a semver range (`#semver:^3.0.0`). They are fetched separately: the workflow definition by GitHub when the job starts, `gasdev` by `npm ci` from your lockfile. Keep them on the same version.
+
+### Setup
+
+Step 1 is done once per Google account, steps 2-3 once per repository, steps 4-7 once per environment (`dev`, `live`), and steps 8-9 once.
+
+#### 1. Enable the Apps Script API
+
+Enable the [Apps Script API](https://script.google.com/home/usersettings) for the Google account that owns the scripts, ideally a dedicated account.
+
+#### 2. Commit the clasp and manifest templates
+
+Commit `.clasp.example.json` and `appsscript.example.json` at the project root. If either is missing, `gasdev setup` offers to create it with defaults (`{ "rootDir": "dist" }` and a V8 manifest with `STACKDRIVER` exception logging and empty `oauthScopes`, without a `webapp` block); review the files (`rootDir`, `oauthScopes`, the `webapp` block) and commit them. `gasdev deploy` still requires both and never creates them. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
+
+```json
+{ "rootDir": "dist" }
+```
+
+Add `.clasp.json` to `.gitignore`: `gasdev` overwrites it from the template plus `GAS_SCRIPT_ID`.
+
+#### 3. Provide `check` and `build`
+
+Define `npm run check` and `npm run build` scripts, or override them with the [workflow inputs](#workflow-inputs-and-outputs). The build must produce `<rootDir>/appsscript.json`. Web apps declare `oauthScopes` explicitly; see [Scope changes](#scope-changes).
+
+#### 4. Create the Apps Script project and web app deployment
+
+CI never creates the first deployment, because it requires an interactive consent prompt. This applies to both ways below.
+
+With the wizard:
+
+- Run `npm run deploy:setup` (the [setup wizard](#setup-wizard)).
+- Read `GAS_SCRIPT_ID` and `GAS_DEPLOYMENT_ID` from `.env`.
+
+Manually in the editor:
+
+- Copy the Script ID from Project Settings.
+- Deploy > New deployment > Web app, then copy the deployment ID (versioned, not HEAD).
+
+`deploy:setup` writes the IDs to `.env` and has no per-environment option, so record them before running it again for the next environment.
+
+Libraries and bound scripts need only the script ID; see [Project types](#project-types). Use a separate script per environment.
+
+#### 5. Create the GitHub environment restricted to its branch
+
+Example for `dev` and `develop`; repeat for `live` and `main`. The deployment branch policy releases `CLASPRC_JSON` only to runs on that branch:
+
+```sh
+gh api -X PUT repos/{owner}/{repo}/environments/dev \
+  -F 'deployment_branch_policy[protected_branches]=false' \
+  -F 'deployment_branch_policy[custom_branch_policies]=true'
+gh api -X POST repos/{owner}/{repo}/environments/dev/deployment-branch-policies \
+  -f name=develop
+```
+
+Alternatively, in the UI: Settings > Environments > New environment > Deployment branches and tags > Selected branches.
+
+#### 6. Set the variables
+
+```sh
+gh variable set GAS_SCRIPT_ID --env dev --body <script-id>
+gh variable set GAS_DEPLOYMENT_ID --env dev --body <deployment-id>
+```
+
+`GAS_DEPLOYMENT_ID` is for web apps only. These are variables, not secrets; see [Environments](#environments).
+
+#### 7. Store `CLASPRC_JSON`
+
+Run `npx clasp login` (or `npm run deploy:setup`, which logs in) on a trusted machine, ideally with a dedicated Google account that owns the scripts. Then store the credentials in the environment:
+
+```sh
+gh secret set CLASPRC_JSON --env dev < ~/.clasprc.json
+```
+
+See [Token expiry, revocation and rotation](#token-expiry-revocation-and-rotation).
+
+#### 8. Add the caller workflow
+
+Add the workflow from [Usage](#usage) at `.github/workflows/deploy.yml`.
+
+#### 9. Verify the first run
+
+Push to `develop`, then merge to `main` and confirm the `live` run. The job summary and the `url` output show the web app URL; a push-only project shows no URL. On a scope-change failure, follow [Scope changes](#scope-changes). On `invalid_grant`, follow [token rotation](#token-expiry-revocation-and-rotation).
+
+### Setup wizard
+
+Run it from the project root:
+
+```sh
+npm run deploy:setup
+```
+
+The wizard runs these steps in order:
+
+1. **Authentication:** continue as the logged-in clasp user, or log in with another account.
+2. **Apps Script project:** reuse the project in `.clasp.json`, or create a new one.
+3. **Configuration:** write `.clasp.json` and the manifest, asking for the time zone.
+4. **Push:** `clasp push --force`.
+5. **Deployment:** open the script editor, wait while you deploy the web app, then read the deployment and confirm its URL.
+6. **Summary:** script ID, web app URL, deployment ID and version.
+
+| Code  | Meaning           |
+| ----- | ----------------- |
+| `0`   | Success           |
+| `1`   | Failed deployment |
+| `2`   | Invalid usage     |
+| `130` | Cancelled         |
+
+#### Wizard configuration
+
+The two required templates are described in [step 2](#2-commit-the-clasp-and-manifest-templates).
+
+Options live in `package.json` under `gasdev.ci`:
+
+| Key     | Type   | Default                 | Description                        |
+| ------- | ------ | ----------------------- | ---------------------------------- |
+| `title` | string | `package.json` `"name"` | Title of a new Apps Script project |
+| `steps` | string | none                    | Module with project-defined steps  |
+
+The validation rules are in [The gasdev key](#the-gasdev-key).
+
+#### Custom steps
+
+Set `gasdev.ci.steps` to a project-relative path to an ES module (`.js` or `.mjs`, no `..` segments). Its default export is an array of steps, run in order after the deployment and before the summary:
+
+```json
+{ "gasdev": { "ci": { "steps": "scripts/deploy-steps.js" } } }
+```
+
+The module is loaded before login, so a broken module fails before anything touches Apps Script. Each step is `{ title, run(ctx) }`, where `title` is a non-empty string and `run` is a function that may be async.
+
+Error handling:
+
+- Throw `DeployError` (exported by `gasdev/ci`) to fail cleanly.
+- Any other error is reported as `Step "<title>" failed: <message>`.
+- An error thrown from a prompt question's `validate`, `format` or `onSubmit` callback is reported by `prompts` as a cancel (`Cancelled.`, exit 130), so validate inputs in `run` when the message matters.
+
+`ctx` has:
+
+| Property             | Description                                                                        |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| `cwd`                | Project root                                                                       |
+| `pkg`                | Parsed `package.json`                                                              |
+| `deployment`         | `{ scriptId, webappUrl, deploymentId, version }`                                   |
+| `env.read()`         | Parsed `.env`, empty when the file does not exist                                  |
+| `env.update(values)` | Sets keys in `.env` in place, keeping comments; values must not contain newlines   |
+| `prompt(questions)`  | [`prompts`](https://github.com/terkelg/prompts) questions; resolves to the answers |
+| `log`                | `info`, `success`, `warn`, `error`, `raw` and `section`                            |
+| `openScript()`       | Opens the script in the Apps Script editor                                         |
+
+Types ship with the package. Steps run with your user privileges, so only point `steps` at code you trust. See [ADR 0016](docs/adr/0016-project-defined-steps.md).
+
+##### Example: Calendly OAuth credentials
+
+A step that asks for a Calendly OAuth client ID and secret, stores them in `.env`, prints the Script Property to save and opens the editor:
+
+```js
+// scripts/deploy-steps.js
+import { DeployError } from 'gasdev/ci';
+
+/** @type {import('gasdev/ci').DeployStep[]} */
+export default [
+  {
+    title: 'Calendly OAuth setup',
+    async run(ctx) {
+      const stored = ctx.env.read();
+      let clientId = stored.CALENDLY_CLIENT_ID;
+      let clientSecret = stored.CALENDLY_CLIENT_SECRET;
+
+      let provide = true;
+      if (clientId && clientSecret) {
+        ctx.log.warn('Existing Calendly OAuth credentials detected');
+        ({ provide } = await ctx.prompt({
+          type: 'confirm',
+          name: 'provide',
+          message: 'Provide new credentials?',
+          initial: true,
+        }));
+      }
+
+      if (provide) {
+        ({ clientId, clientSecret } = await ctx.prompt([
+          { type: 'text', name: 'clientId', message: 'OAuth Client ID' },
+          {
+            type: 'password',
+            name: 'clientSecret',
+            message: 'OAuth Client Secret',
+          },
+        ]));
+        if (!clientId || !clientSecret) {
+          throw new DeployError('Client ID and secret are required');
+        }
+        ctx.env.update({
+          CALENDLY_CLIENT_ID: clientId,
+          CALENDLY_CLIENT_SECRET: clientSecret,
+        });
+      }
+
+      const credentials = {
+        clientId,
+        clientSecret,
+        redirectUri: ctx.deployment.webappUrl,
+      };
+      ctx.log.info('Save this JSON as a Script Property:');
+      ctx.log.raw(JSON.stringify(credentials, null, 2));
+
+      ctx.openScript();
+      await ctx.prompt({
+        type: 'text',
+        name: 'done',
+        message: 'After saving the Script Property, press ENTER to continue',
+      });
+    },
+  },
+];
+```
+
+#### Files written
+
+- `.clasp.json`: the template plus `scriptId`. It is always regenerated, never merged with an older file.
+- `<rootDir>/appsscript.json`: the existing manifest, then the template, with the chosen `timeZone`. The default time zone is the template's, then the existing manifest's, then the system's, then `Etc/UTC`.
+- `.env`: updated in place with the variables below, and created with mode `0600`.
+
+#### Environment variables
+
+| Variable            | Value                                          |
+| ------------------- | ---------------------------------------------- |
+| `GAS_SCRIPT_ID`     | Apps Script project ID                         |
+| `GAS_WEBAPP_URL`    | `https://script.google.com/macros/s/<id>/exec` |
+| `GAS_DEPLOYMENT_ID` | Deployment ID of the web app                   |
+| `GAS_VERSION`       | Deployed version number                        |
+
+#### Why deployment is manual
+
+Deploying from the Apps Script editor triggers the OAuth consent prompt for the manifest's scopes without a Google Cloud OAuth client, which `clasp deploy` followed by `clasp run` would need. See [ADR 0015](docs/adr/0015-manual-web-app-deployment.md).
+
+### Usage
+
+```yaml
+on:
+  push:
+    branches: [develop, main]
+jobs:
+  deploy:
+    uses: yorsh-co/gasdev/.github/workflows/gas-deploy.yml@v3.0.0
+    with:
+      environment: ${{ github.ref_name == 'main' && 'live' || 'dev' }}
+    secrets: inherit
+```
+
+`develop` deploys to the `dev` environment and `main` to `live`. `secrets: inherit` is enough: the secret is resolved from the environment the job runs in.
+
+#### Environments
+
+| Environment | Branch    | Secret         | Variables                            |
+| ----------- | --------- | -------------- | ------------------------------------ |
+| `dev`       | `develop` | `CLASPRC_JSON` | `GAS_SCRIPT_ID`, `GAS_DEPLOYMENT_ID` |
+| `live`      | `main`    | `CLASPRC_JSON` | `GAS_SCRIPT_ID`, `GAS_DEPLOYMENT_ID` |
+
+The IDs are variables, not secrets, on purpose: GitHub drops job outputs that contain a secret value, and the web app URL contains the deployment ID. They identify the project but grant no access. Both may contain only letters, digits, `_` and `-`.
+
+#### Project types
+
+| Project               | `GAS_DEPLOYMENT_ID` | Result                                   |
+| --------------------- | ------------------- | ---------------------------------------- |
+| Web app               | set                 | Scope check, push, new version, redeploy |
+| Library, bound script | not set             | Push only                                |
+
+`GAS_DEPLOYMENT_ID` must be a versioned web app deployment, not the HEAD deployment.
+
+#### Workflow inputs and outputs
+
+| Input          | Default         | Description                                      |
+| -------------- | --------------- | ------------------------------------------------ |
+| `environment`  | required        | GitHub environment with the secret and variables |
+| `node-version` | `22`            | Node.js version                                  |
+| `check`        | `npm run check` | Lint, type check and tests                       |
+| `build`        | `npm run build` | Builds the project into its `rootDir`            |
+
+| Output | Description                                                         |
+| ------ | ------------------------------------------------------------------- |
+| `url`  | Web app URL of the redeployed version; empty for a push-only deploy |
+
+The `check` and `build` steps run project code and never see `CLASPRC_JSON`.
+
+### Token expiry, revocation and rotation
+
+A refresh token stops working when the user revokes access, after 6 months without use, on some password changes, and when the per-client token limit evicts old tokens. The symptom is `clasp push` failing with `invalid_grant`.
+
+To rotate: run `npx clasp login`, update the secret in every environment, then revoke the old grant in the Google Account's security settings.
+
+### Scope changes
+
+If the OAuth scopes in the built `appsscript.json` differ from those of the deployed version, the workflow fails before pushing and lists the added and removed scopes. To fix it:
+
+1. Build locally and run `clasp push`.
+2. In the Apps Script editor, go to Deploy > Manage deployments, edit the web app deployment, choose New version and authorize.
+3. Re-run the workflow.
+
+The check compares only the explicit `oauthScopes` in `appsscript.json`. A project that relies on automatic scope detection (no `oauthScopes` key) always passes the check, so web-app projects should declare `oauthScopes` explicitly.
+
+<a id="deploy-cli-reference"></a>
+
+### Command reference
+
+```sh
+gasdev setup
+gasdev deploy
+```
+
+`setup` takes no arguments; see [Setup wizard](#setup-wizard). The rest of this section covers `deploy`.
+
+| Variable              | Required             | Description                                                                                                                        |
+| --------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `CLASPRC_JSON`        | yes                  | Contents of `~/.clasprc.json`. Written to a private temporary file (mode 600), removed afterwards (in `RUNNER_TEMP` under Actions) |
+| `GAS_SCRIPT_ID`       | yes                  | Script ID, written to `.clasp.json` (overwritten if present)                                                                       |
+| `GAS_DEPLOYMENT_ID`   | no                   | Web app deployment to redeploy                                                                                                     |
+| `GITHUB_SHA`          | with a deployment ID | Description of the new version and deployment                                                                                      |
+| `GITHUB_OUTPUT`       | no                   | File that receives the `url` output                                                                                                |
+| `GITHUB_STEP_SUMMARY` | no                   | File that receives the job summary                                                                                                 |
+
+`.clasp.json` is rendered from `.clasp.example.json` plus the script ID (`rootDir` must be absent or a relative path without `..`). Under `GITHUB_ACTIONS=true` every string of `CLASPRC_JSON` with 8 or more characters is masked in the logs.
+
+| Code | Meaning                                                                       |
+| ---- | ----------------------------------------------------------------------------- |
+| `0`  | Deployed, or help or version printed                                          |
+| `1`  | Deployment failed: invalid inputs, scope change, missing build or clasp error |
+| `2`  | Invalid usage                                                                 |
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Migrating an existing project
+
+1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) to `devDependencies` (see [Requirements](#requirements) and [Install](#install)).
+2. Run `npm install`.
+3. Set `"prettier": "gasdev/prettier"` in `package.json` and delete `.prettierrc.json` (the `prettier` key takes precedence over `.prettierrc.json`).
+4. Replace the options of `tsconfig.json` and `tsconfig.test.json` with an `extends` of the matching preset, keeping `rootDir`, `outDir` and `include` local (see [TypeScript](#typescript)).
+5. Replace `eslint.config.js` with `gasEslint(...)` (see [ESLint](#eslint)).
+6. Remove `@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` from `devDependencies`.
+7. For plain JavaScript tooling, add `"gasdev": { "preset": "node" }` to `package.json`.
+8. Run `npx gasdev init` to add `.github/dependabot.yml`, the ignore lines and the missing required scripts.
+9. Add `gasdev check` to the `check` script (if `init` added it, this is already done) and align the scripts `init` did not change with what the check reports.
+10. Run `npm install` to prune the removed dependencies, then `npm run check`. It must pass with no source changes: `prettier --check`, `eslint` and `tsc` are clean.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Migrating to 3.0
+
+3.0 merges `gas-dev-config`, `gas-dev-bundle`, `gas-dev-release` and `gas-dev-ci` into one package named `gasdev`. A `package.json` that still has an old key is rejected with an error that points here.
+See [the migration guide](docs/migrating-to-3.0.md) for the dependency, script, key, import and workflow changes. Each step is a manual edit; `init` and `check --fix` do not rewrite existing entries.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Contributing
+
+Run `npm run check` before opening a pull request. It runs the format check, lint, typecheck, coverage-gated tests and `gasdev check`.
+
+- `npm run test:network` runs the network tests (`GASDEV_NETWORK=1`).
+- `npm run lint:workflows` validates the workflows and needs `action-validator`.
+- Decisions are recorded in `docs/adr/`.
+- Commits follow Conventional Commits.
+- Update `CHANGELOG.md` with every user-facing change.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## License
 
 MIT
 
-See the `LICENSE` file for details.
+See the [`LICENSE.md`](LICENSE.md) file for details.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Support
 
@@ -700,8 +1578,10 @@ Issues and feature requests are welcome via GitHub Issues.
 
 Maintained by [yorsh-co](https://github.com/yorsh-co).
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ---
 
 > [!TIP]
-> Found `gas-dev-config` useful?
+> Found `gasdev` useful?
 > Find more Google Apps Script libraries at [github.com/yorsh-co](https://github.com/yorsh-co).

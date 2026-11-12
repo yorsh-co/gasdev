@@ -14,7 +14,7 @@ let captured = [];
 /** @type {any} */
 let options;
 
-vi.mock('gas-dev-bundle', () => ({
+vi.mock('../src/bundle/index.js', () => ({
   BundleError: class BundleError extends Error {},
   bundle: vi.fn((/** @type {any} */ opts) => {
     options = opts;
@@ -38,7 +38,7 @@ afterEach(() => {
 
 /** @returns {string} A project with two library files and two tests. */
 function createProject() {
-  const dir = mkdtempSync(join(tmpdir(), 'gas-dev-config-build-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'gasdev-build-test-'));
   dirs.push(dir);
   mkdirSync(join(dir, 'src'));
   mkdirSync(join(dir, 'gas-test'));
@@ -75,7 +75,7 @@ describe('buildGasTest', () => {
     expect(captured[0]?.text).toBe('const A = 1;\n');
     expect(captured[3]?.text).toContain("test('a'");
     expect(code).toMatch(
-      /^\/\/ gas-dev-config gas-test build \d{4}-\d\d-\d\dT[\d:.]+Z [0-9a-f]{16}\n\/\/ bundled\n$/,
+      /^\/\/ gasdev gas-test build \d{4}-\d\d-\d\dT[\d:.]+Z [0-9a-f]{16}\n\/\/ bundled\n$/,
     );
   });
 

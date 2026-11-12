@@ -145,13 +145,13 @@ export function createGasLoader(options) {
 }
 
 /**
- * Lists the source files named by `gasDevConfig.loadOrder` in package.json, as
+ * Lists the source files named by `gasdev.loadOrder` in package.json, as
  * `src/`-prefixed POSIX paths relative to `root`, ready for `createGasLoader`.
- * Path validation is left to `gas-dev-config check`.
+ * Path validation is left to `gasdev check`.
  *
  * @param {string} [root] Project directory; defaults to `process.cwd()`.
  * @returns {string[]}
- * @throws {Error} When package.json is unreadable or invalid, or `gasDevConfig.loadOrder` is not a non-empty array of non-empty strings.
+ * @throws {Error} When package.json is unreadable or invalid, or `gasdev.loadOrder` is not a non-empty array of non-empty strings.
  */
 export function loadOrderFiles(root = process.cwd()) {
   const path = join(root, 'package.json');
@@ -162,10 +162,10 @@ export function loadOrderFiles(root = process.cwd()) {
   } catch (cause) {
     throw new Error(`loadOrderFiles: cannot read ${path}`, { cause });
   }
-  const loadOrder = pkg?.gasDevConfig?.loadOrder;
+  const loadOrder = pkg?.gasdev?.loadOrder;
   if (!isNonEmptyStringArray(loadOrder)) {
     throw new Error(
-      `loadOrderFiles: "gasDevConfig.loadOrder" in ${path} must be a non-empty array of non-empty strings`,
+      `loadOrderFiles: "gasdev.loadOrder" in ${path} must be a non-empty array of non-empty strings`,
     );
   }
   return loadOrder.map((entry) => `src/${entry}`);

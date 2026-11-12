@@ -1,1 +1,1 @@
-{ "extends": "gas-dev-config/tsconfig/web.json", "include": ["src/web/**/*.ts"] }
+{ "extends": "gasdev/tsconfig/web.json", "include": ["src/web/**/*.ts"] }

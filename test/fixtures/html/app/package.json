@@ -1,6 +1,6 @@
 {
   "name": "consumer",
-  "gasDevConfig": {
+  "gasdev": {
     "loadOrder": ["generated/app.html.ts"],
     "html": [
       {

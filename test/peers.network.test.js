@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { REPO_ROOT } from './support.js';
 
-const BIN = join(REPO_ROOT, 'bin', 'gas-dev-config.js');
+const BIN = join(REPO_ROOT, 'bin', 'gasdev.js');
 const OUTPUT = join('src', 'internal', 'gas-lock.peer.types.d.ts');
 
 /** @type {string[]} */
@@ -28,13 +28,13 @@ afterEach(() => {
  * @returns {string} The project directory.
  */
 function project() {
-  const dir = mkdtempSync(join(tmpdir(), 'gas-dev-config-peers-net-'));
+  const dir = mkdtempSync(join(tmpdir(), 'gasdev-peers-net-'));
   dirs.push(dir);
   writeFileSync(
     join(dir, 'package.json'),
     JSON.stringify({
       name: 'x',
-      gasDevConfig: { peers: { 'gas-lock': '^1.2.0' } },
+      gasdev: { peers: { 'gas-lock': '^1.2.0' } },
     }),
   );
   return dir;
@@ -58,7 +58,7 @@ function run(cwd, args) {
   };
 }
 
-describe.skipIf(process.env.GAS_DEV_CONFIG_NETWORK !== '1')(
+describe.skipIf(process.env.GASDEV_NETWORK !== '1')(
   'CLI against GitHub',
   () => {
     it('peers sync --check reports a missing file and writes nothing', () => {
@@ -66,7 +66,7 @@ describe.skipIf(process.env.GAS_DEV_CONFIG_NETWORK !== '1')(
       const result = run(dir, ['peers', 'sync', '--check']);
       expect(result.status).toBe(1);
       expect(result.stderr).toMatch(
-        /src\/internal\/gas-lock\.peer\.types\.d\.ts is out of date with gas-lock@1\.\d+\.\d+: run gas-dev-config peers sync/,
+        /src\/internal\/gas-lock\.peer\.types\.d\.ts is out of date with gas-lock@1\.\d+\.\d+: run gasdev peers sync/,
       );
       expect(existsSync(join(dir, OUTPUT))).toBe(false);
     });

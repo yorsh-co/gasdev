@@ -1,4 +1,4 @@
 {
-  "extends": "gas-dev-config/tsconfig/gas-test.json",
+  "extends": "gasdev/tsconfig/gas-test.json",
   "include": ["../src/**/*.ts", "ok.ts"]
 }

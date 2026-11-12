@@ -1,7 +1,7 @@
 // @ts-check
-import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
+import { GhError, gh as runGh, listRulesets, readRuleset } from '../src/gh.js';
 
 /**
  * @typedef {Record<string, any> & { name: string }} Ruleset
@@ -25,7 +25,7 @@ const INSTALL_HINT =
 export class GithubError extends Error {}
 
 /**
- * Runs gh without a shell.
+ * Runs gh, turning gh failures into GitHub errors.
  *
  * @param {string[]} args
  * @param {string} [input] Text written to stdin.
@@ -33,20 +33,26 @@ export class GithubError extends Error {}
  * @throws {GithubError} When gh cannot be started.
  */
 function gh(args, input) {
-  const result = spawnSync('gh', args, {
-    encoding: 'utf8',
-    input,
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  if (result.error) {
-    const { code, message } = /** @type {Error & { code?: string }} */ (
-      result.error
-    );
-    throw new GithubError(
-      code === 'ENOENT' ? INSTALL_HINT : `cannot run gh: ${message}`,
-    );
+  return viaGh(() => runGh(args, { input }));
+}
+
+/**
+ * Runs a gh call, turning gh failures into GitHub errors.
+ *
+ * @template T
+ * @param {() => T} run
+ * @returns {T}
+ * @throws {GithubError} When gh is missing or the call fails.
+ */
+function viaGh(run) {
+  try {
+    return run();
+  } catch (error) {
+    if (error instanceof GhError) {
+      throw new GithubError(error.missing ? INSTALL_HINT : error.message);
+    }
+    throw error;
   }
-  return result;
 }
 
 /**
@@ -109,20 +115,14 @@ export function loadTemplates() {
  * @throws {GithubError} When a gh call fails.
  */
 function readRulesets(repo) {
-  const list = JSON.parse(
-    ghStep([
-      'api',
-      `repos/${repo}/rulesets?per_page=100&includes_parents=false`,
-    ]),
+  return viaGh(() =>
+    listRulesets(repo, { includeParents: false })
+      .filter(
+        (/** @type {{ source_type?: string }} */ item) =>
+          item.source_type === undefined || item.source_type === 'Repository',
+      )
+      .map((/** @type {{ id: number }} */ item) => readRuleset(repo, item.id)),
   );
-  return list
-    .filter(
-      (/** @type {{ source_type?: string }} */ item) =>
-        item.source_type === undefined || item.source_type === 'Repository',
-    )
-    .map((/** @type {{ id: number }} */ item) =>
-      JSON.parse(ghStep(['api', `repos/${repo}/rulesets/${item.id}`])),
-    );
 }
 
 /**
@@ -223,7 +223,7 @@ export function formatGithubReport(repo, result) {
   lines.push(
     issues === 0
       ? '✓ GitHub rulesets match the template'
-      : `✗ GitHub rulesets differ from the template: ${issues} issue(s). Run gas-dev-config github --fix to apply it.`,
+      : `✗ GitHub rulesets differ from the template: ${issues} issue(s). Run gasdev github --fix to apply it.`,
   );
   return lines;
 }

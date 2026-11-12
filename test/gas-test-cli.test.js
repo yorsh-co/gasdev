@@ -1,6 +1,5 @@
 import { spawnSync } from 'node:child_process';
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -9,19 +8,23 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { INSTALL_HINT } from '../bin/gas-test.js';
 import { REPO_ROOT } from './support.js';
 
-const BIN = join(REPO_ROOT, 'bin', 'gas-dev-config.js');
+const BIN = join(REPO_ROOT, 'bin', 'gasdev.js');
+const HIDE_CLASP = pathToFileURL(
+  join(REPO_ROOT, 'test', 'fixtures', 'hide-clasp.mjs'),
+).href;
 const SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/script.storage',
 ];
 
 /** Fake clasp: logs argv and project state, then prints canned output. */
-const FAKE_CLASP = `#!/usr/bin/env node
-const fs = require('node:fs');
+const FAKE_CLASP = `const fs = require('node:fs');
 const args = process.argv.slice(2);
 const entry = { args, cwd: process.cwd() };
 if (args[0] === 'clone') {
@@ -42,6 +45,14 @@ if (args[0] === 'run') {
 }
 `;
 
+/** Fake `@google/clasp` package, installed in each test project's node_modules. */
+const FAKE_CLASP_PACKAGE = JSON.stringify({
+  name: '@google/clasp',
+  version: '0.0.0',
+  main: 'index.js',
+  bin: { clasp: 'index.js' },
+});
+
 /** @type {string[]} */
 const dirs = [];
 
@@ -52,16 +63,16 @@ afterEach(() => {
 
 /** @returns {string} */
 function tempDir() {
-  const dir = mkdtempSync(join(tmpdir(), 'gas-dev-config-cli-'));
+  const dir = mkdtempSync(join(tmpdir(), 'gasdev-cli-'));
   dirs.push(dir);
   return dir;
 }
 
 /**
- * @param {Record<string, unknown>} [gasDevConfig]
+ * @param {Record<string, unknown>} [gasdev]
  * @returns {string} A project with a library file and a test.
  */
-function createProject(gasDevConfig = {}) {
+function createProject(gasdev = {}) {
   const dir = tempDir();
   mkdirSync(join(dir, 'src'));
   mkdirSync(join(dir, 'gas-test'));
@@ -70,14 +81,18 @@ function createProject(gasDevConfig = {}) {
     join(dir, 'gas-test', 'lib.test.ts'),
     "test('lib', () => assert(LIB === 1));\n",
   );
+  const clasp = join(dir, 'node_modules', '@google', 'clasp');
+  mkdirSync(clasp, { recursive: true });
+  writeFileSync(join(clasp, 'package.json'), FAKE_CLASP_PACKAGE);
+  writeFileSync(join(clasp, 'index.js'), FAKE_CLASP);
   writeFileSync(
     join(dir, 'package.json'),
     JSON.stringify({
       name: 'consumer',
-      gasDevConfig: {
+      gasdev: {
         loadOrder: ['lib.ts'],
         gasTest: { scopes: SCOPES, scriptId: 'config-script' },
-        ...gasDevConfig,
+        ...gasdev,
       },
     }),
   );
@@ -85,20 +100,17 @@ function createProject(gasDevConfig = {}) {
 }
 
 /**
- * Installs the fake clasp and returns the environment to run the CLI with.
+ * Returns the environment to run the CLI with. The fake clasp logs to a file; `PATH` has no clasp.
  *
  * @param {Record<string, string>} [extra]
  */
 function fakeEnv(extra = {}) {
-  const bin = tempDir();
   const log = join(tempDir(), 'clasp.log');
   writeFileSync(log, '');
-  writeFileSync(join(bin, 'clasp'), FAKE_CLASP);
-  chmodSync(join(bin, 'clasp'), 0o755);
   /** @type {NodeJS.ProcessEnv} */
   const env = {
     ...process.env,
-    PATH: `${bin}${delimiter}${dirname(process.execPath)}${delimiter}${process.env['PATH']}`,
+    PATH: tempDir(),
     FAKE_CLASP_LOG: log,
     ...extra,
   };
@@ -118,9 +130,10 @@ function fakeEnv(extra = {}) {
  * @param {string} cwd
  * @param {string[]} args
  * @param {NodeJS.ProcessEnv} [env]
+ * @param {string[]} [nodeArgs]
  */
-function run(cwd, args, env = process.env) {
-  const r = spawnSync(process.execPath, [BIN, ...args], {
+function run(cwd, args, env = process.env, nodeArgs = []) {
+  const r = spawnSync(process.execPath, [...nodeArgs, BIN, ...args], {
     cwd,
     env,
     encoding: 'utf8',
@@ -140,13 +153,7 @@ describe('gas-test build', () => {
   it('writes the default cache file with real bundling and no peers', () => {
     const dir = createProject();
     const result = run(dir, ['gas-test', 'build']);
-    const out = join(
-      dir,
-      'node_modules',
-      '.cache',
-      'gas-dev-config',
-      'gas-test.js',
-    );
+    const out = join(dir, 'node_modules', '.cache', 'gasdev', 'gas-test.js');
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(out);
     expect(result.stdout).toContain(
@@ -154,7 +161,7 @@ describe('gas-test build', () => {
     );
     const code = readFileSync(out, 'utf8');
     expect(code.split('\n')[0]).toMatch(
-      /^\/\/ gas-dev-config gas-test build \S+ [0-9a-f]{16}$/,
+      /^\/\/ gasdev gas-test build \S+ [0-9a-f]{16}$/,
     );
     const order = [
       '// ---- lib.js ----',
@@ -177,11 +184,11 @@ describe('gas-test build', () => {
   it('fails without loadOrder', () => {
     const dir = createProject();
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-    pkg.gasDevConfig = {};
+    pkg.gasdev = {};
     writeFileSync(join(dir, 'package.json'), JSON.stringify(pkg));
     const result = run(dir, ['gas-test', 'build']);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('"gasDevConfig.loadOrder" is required');
+    expect(result.stderr).toContain('"gasdev.loadOrder" is required');
   });
 
   it('fails without tests', () => {
@@ -229,7 +236,26 @@ describe('gas-test run', () => {
     const dir = createProject({ gasTest: undefined });
     const result = run(dir, ['gas-test', 'run'], fakeEnv().env);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('"gasDevConfig.gasTest" is required');
+    expect(result.stderr).toContain('"gasdev.gasTest" is required');
+  });
+
+  // The fixture patches CommonJS resolution because `src/clasp-bin.js` locates clasp with `require.resolve`.
+  it('prints the install hint when clasp cannot be resolved', () => {
+    const dir = createProject();
+    const { env, entries } = fakeEnv();
+    const result = run(dir, ['gas-test', 'run'], env, ['--import', HIDE_CLASP]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(INSTALL_HINT);
+    expect(entries()).toEqual([]);
+  });
+
+  it('does not print the install hint when clasp resolves', () => {
+    const dir = createProject();
+    const { env, entries } = fakeEnv();
+    const result = run(dir, ['gas-test', 'run'], env);
+    expect(result.status).toBe(1);
+    expect(result.stderr).not.toContain(INSTALL_HINT);
+    expect(entries()[0]?.args[0]).toBe('clone');
   });
 
   it('clones, pushes and runs, then prints results and cleans up', () => {
@@ -263,7 +289,7 @@ describe('gas-test run', () => {
       executionApi: { access: 'MYSELF' },
       oauthScopes: SCOPES,
     });
-    expect(push.head).toMatch(/^\/\/ gas-dev-config gas-test build /);
+    expect(push.head).toMatch(/^\/\/ gasdev gas-test build /);
     expect(existsSync(clone.cwd)).toBe(false);
   });
 
@@ -314,7 +340,7 @@ describe('gas-test run', () => {
     expect(result.stderr).toContain('nothing here');
     expect(result.stderr).toContain('PERMISSION_DENIED');
     expect(result.stderr).toContain(
-      `clasp login --extra-scopes ${SCOPES.join(',')}`,
+      `npx clasp login --extra-scopes ${SCOPES.join(',')}`,
     );
   });
 
@@ -327,18 +353,6 @@ describe('gas-test run', () => {
     const result = run(dir, ['gas-test', 'run'], env);
     expect(result.status).toBe(1);
     expect(result.stderr).not.toContain('--extra-scopes');
-  });
-
-  it('explains how to install clasp when it is missing', () => {
-    const dir = createProject();
-    const empty = tempDir();
-    const result = run(dir, ['gas-test', 'run'], {
-      ...process.env,
-      PATH: empty,
-    });
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('npm install -D @google/clasp');
-    expect(result.stderr).toContain('clasp login');
   });
 
   it('keeps the temporary project with --keep', () => {

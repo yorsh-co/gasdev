@@ -171,8 +171,7 @@ describe('loadOrderFiles', () => {
   }
 
   /** @param {unknown} loadOrder */
-  const withOrder = (loadOrder) =>
-    JSON.stringify({ gasDevConfig: { loadOrder } });
+  const withOrder = (loadOrder) => JSON.stringify({ gasdev: { loadOrder } });
 
   it('returns the load order prefixed with src/', () => {
     const dir = createDir(withOrder(['b.types.ts', 'lib/a.ts']));
@@ -210,8 +209,8 @@ describe('loadOrderFiles', () => {
   });
 
   it.each([
-    ['gasDevConfig is missing', '{}'],
-    ['loadOrder is missing', '{"gasDevConfig":{}}'],
+    ['gasdev is missing', '{}'],
+    ['loadOrder is missing', '{"gasdev":{}}'],
     ['loadOrder is not an array', withOrder('a.ts')],
     ['loadOrder is empty', withOrder([])],
     ['loadOrder has a non-string', withOrder(['a.ts', 1])],
@@ -219,7 +218,7 @@ describe('loadOrderFiles', () => {
   ])('throws when %s', (_name, packageJson) => {
     const dir = createDir(packageJson);
     expect(() => loadOrderFiles(dir)).toThrow(
-      'loadOrderFiles: "gasDevConfig.loadOrder" in',
+      'loadOrderFiles: "gasdev.loadOrder" in',
     );
     expect(() => loadOrderFiles(dir)).toThrow(
       'must be a non-empty array of non-empty strings',
@@ -240,7 +239,7 @@ describe('loadOrderFiles', () => {
   });
 });
 
-describe('gas-dev-config/test types', () => {
+describe('gasdev/test types', () => {
   /** @type {ReturnType<typeof createProject>} */
   let project;
 
@@ -262,7 +261,7 @@ describe('gas-dev-config/test types', () => {
     return { status: result.status, output: result.stdout + result.stderr };
   }
 
-  it('type-checks a consumer importing gas-dev-config/test', () => {
+  it('type-checks a consumer importing gasdev/test', () => {
     expect(tsc('tsconfig.json')).toEqual({ status: 0, output: '' });
   });
 

@@ -1,10 +1,20 @@
 // @ts-check
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { legacyKeyMessage } from '../src/legacy-keys.js';
 import { HtmlError, compareModule } from './html.js';
 
 const PRESETS = ['gas', 'node'];
-const KNOWN_KEYS = ['preset', 'loadOrder', 'peers', 'gasTest', 'html'];
+const KNOWN_KEYS = [
+  'preset',
+  'loadOrder',
+  'peers',
+  'gasTest',
+  'html',
+  'bundle',
+  'release',
+  'ci',
+];
 const GAS_TEST_KEYS = ['scopes', 'scriptId'];
 const HTML_KEYS = ['entry', 'out', 'name'];
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -60,13 +70,16 @@ const SCOPE_PREFIX = 'https://www.googleapis.com/auth/';
 const PEER_NAME = /^[a-z0-9][a-z0-9._-]*$/;
 const TEMPLATES = new URL('../templates/', import.meta.url);
 
-/** Local invocation used in place of the `gas-dev-config` bin by this package itself. */
-const SELF_BIN = 'node bin/gas-dev-config.js';
+/** Local invocation used in place of the `gasdev` bin by this package itself. */
+const SELF_BIN = 'node bin/gasdev.js';
+/** Coverage-gated test step this package runs in place of `npm run test`. */
+const SELF_TEST = 'npm run test:coverage';
 
 /**
  * @typedef {object} Drift
  * @property {string} file Project file the drift belongs to.
  * @property {string} message What is missing, expected or different.
+ * @property {boolean} [warning] Reported without failing the check.
  */
 
 /**
@@ -97,6 +110,17 @@ const SELF_BIN = 'node bin/gas-dev-config.js';
  * @property {GasTestConfig | undefined} gasTest Settings for tests that run in Apps Script.
  * @property {HtmlEntry[] | undefined} [html] Pages inlined into generated TypeScript constants.
  */
+
+/**
+ * Value `init` and `check --fix` give a script that must only be present. It
+ * fails when run, so a build cannot pass until the project supplies the command.
+ *
+ * @param {string} name Script name.
+ * @returns {string}
+ */
+export function placeholderScript(name) {
+  return `echo 'gasdev: replace the scripts.${name} placeholder in package.json' >&2 && exit 1`;
+}
 
 /** Raised for a configuration problem that prevents the check from running. */
 export class CheckError extends Error {}
@@ -140,14 +164,14 @@ function isRecord(value) {
 }
 
 /**
- * Validates `gasDevConfig.loadOrder`: a non-empty list of unique, relative POSIX
+ * Validates `gasdev.loadOrder`: a non-empty list of unique, relative POSIX
  * paths under `src/` to `.ts` files that are not declaration files.
  *
  * @param {unknown} value
  * @returns {string[]}
  */
 function parseLoadOrder(value) {
-  const key = 'package.json: "gasDevConfig.loadOrder"';
+  const key = 'package.json: "gasdev.loadOrder"';
   if (!Array.isArray(value) || value.length === 0) {
     throw new CheckError(`${key} must be a non-empty array of strings`);
   }
@@ -192,13 +216,13 @@ function parseLoadOrder(value) {
 }
 
 /**
- * Validates `gasDevConfig.peers`: package names mapped to non-empty version ranges.
+ * Validates `gasdev.peers`: package names mapped to non-empty version ranges.
  *
  * @param {unknown} value
  * @returns {Record<string, string>}
  */
 function parsePeers(value) {
-  const key = 'package.json: "gasDevConfig.peers"';
+  const key = 'package.json: "gasdev.peers"';
   if (!isRecord(value)) throw new CheckError(`${key} must be an object`);
   for (const [name, range] of Object.entries(value)) {
     if (!PEER_NAME.test(name)) {
@@ -216,19 +240,19 @@ function parsePeers(value) {
 }
 
 /**
- * Validates `gasDevConfig.gasTest`: the OAuth scopes of the test project and
+ * Validates `gasdev.gasTest`: the OAuth scopes of the test project and
  * an optional script ID.
  *
  * @param {unknown} value
  * @returns {GasTestConfig}
  */
 function parseGasTest(value) {
-  const key = 'package.json: "gasDevConfig.gasTest"';
+  const key = 'package.json: "gasdev.gasTest"';
   if (!isRecord(value)) throw new CheckError(`${key} must be an object`);
   const unknown = Object.keys(value).filter((k) => !GAS_TEST_KEYS.includes(k));
   if (unknown.length > 0) {
     throw new CheckError(
-      `package.json: unknown key(s): ${unknown.map((k) => `"gasDevConfig.gasTest.${k}"`).join(', ')} (expected: ${GAS_TEST_KEYS.join(', ')})`,
+      `package.json: unknown key(s): ${unknown.map((k) => `"gasdev.gasTest.${k}"`).join(', ')} (expected: ${GAS_TEST_KEYS.join(', ')})`,
     );
   }
   const { scopes, scriptId } = value;
@@ -282,14 +306,14 @@ function relativePathProblem(value) {
 }
 
 /**
- * Validates `gasDevConfig.html`: a non-empty list of `{ entry, out, name }`
+ * Validates `gasdev.html`: a non-empty list of `{ entry, out, name }`
  * objects with unique `out` and `name` values.
  *
  * @param {unknown} value
  * @returns {HtmlEntry[]}
  */
 function parseHtml(value) {
-  const key = 'package.json: "gasDevConfig.html"';
+  const key = 'package.json: "gasdev.html"';
   if (!Array.isArray(value) || value.length === 0) {
     throw new CheckError(`${key} must be a non-empty array of objects`);
   }
@@ -303,7 +327,7 @@ function parseHtml(value) {
     const unknown = Object.keys(item).filter((k) => !HTML_KEYS.includes(k));
     if (unknown.length > 0) {
       throw new CheckError(
-        `package.json: unknown key(s): ${unknown.map((k) => `"gasDevConfig.html[${index}].${k}"`).join(', ')} (expected: ${HTML_KEYS.join(', ')})`,
+        `package.json: unknown key(s): ${unknown.map((k) => `"gasdev.html[${index}].${k}"`).join(', ')} (expected: ${HTML_KEYS.join(', ')})`,
       );
     }
     for (const field of HTML_KEYS) {
@@ -359,21 +383,30 @@ function parseHtml(value) {
 }
 
 /**
- * Resolves and validates the `gasDevConfig` field of package.json.
+ * Resolves and validates the `gasdev` field of package.json.
  *
  * @param {Record<string, unknown>} pkg
  * @returns {ResolvedConfig}
  */
 function resolveConfig(pkg) {
-  const config = pkg['gasDevConfig'] ?? {};
+  const legacy = legacyKeyMessage(pkg);
+  if (legacy) {
+    throw new CheckError(legacy);
+  }
+  const config = pkg['gasdev'] ?? {};
   if (!isRecord(config)) {
-    throw new CheckError('package.json: "gasDevConfig" must be an object');
+    throw new CheckError('package.json: "gasdev" must be an object');
   }
   const unknown = Object.keys(config).filter((k) => !KNOWN_KEYS.includes(k));
   if (unknown.length > 0) {
     throw new CheckError(
-      `package.json: unknown "gasDevConfig" key(s): ${unknown.join(', ')} (expected: ${KNOWN_KEYS.join(', ')})`,
+      `package.json: unknown "gasdev" key(s): ${unknown.join(', ')} (expected: ${KNOWN_KEYS.join(', ')})`,
     );
+  }
+  for (const key of ['bundle', 'release', 'ci']) {
+    if (config[key] !== undefined && !isRecord(config[key])) {
+      throw new CheckError(`package.json: "gasdev.${key}" must be an object`);
+    }
   }
   const preset = config['preset'] ?? 'gas';
   if (typeof preset !== 'string' || !PRESETS.includes(preset)) {
@@ -384,18 +417,18 @@ function resolveConfig(pkg) {
   for (const key of ['loadOrder', 'peers', 'gasTest', 'html']) {
     if (config[key] !== undefined && preset !== 'gas') {
       throw new CheckError(
-        `package.json: "gasDevConfig.${key}" requires the gas preset`,
+        `package.json: "gasdev.${key}" requires the gas preset`,
       );
     }
   }
   if (config['gasTest'] !== undefined && config['loadOrder'] === undefined) {
     throw new CheckError(
-      'package.json: "gasDevConfig.gasTest" requires "gasDevConfig.loadOrder"',
+      'package.json: "gasdev.gasTest" requires "gasdev.loadOrder"',
     );
   }
   if (config['html'] !== undefined && config['loadOrder'] === undefined) {
     throw new CheckError(
-      'package.json: "gasDevConfig.html" requires "gasDevConfig.loadOrder"',
+      'package.json: "gasdev.html" requires "gasdev.loadOrder"',
     );
   }
   return {
@@ -527,13 +560,17 @@ function checkScripts(pkg, preset, gasTest) {
     readJson(new URL(`${preset}/scripts.json`, TEMPLATES), 'scripts template')
   );
   const scripts = isRecord(pkg['scripts']) ? pkg['scripts'] : {};
-  const isSelf = pkg['name'] === 'gas-dev-config';
+  const isSelf = pkg['name'] === 'gasdev';
   /** @type {Drift[]} */
   const drift = [];
   const required = { ...template.required, ...(gasTest && template.gasTest) };
   for (const [name, wanted] of Object.entries(required)) {
+    // The `npm run test &&` rewrite matches the template's `check` wording literally. If that
+    // changes, test/check.test.js "requires the coverage gate in this package itself" fails.
     const expected = isSelf
-      ? wanted.replace('gas-dev-config check', `${SELF_BIN} check`)
+      ? wanted
+          .replace('gasdev check', `${SELF_BIN} check`)
+          .replace('npm run test &&', `${SELF_TEST} &&`)
       : wanted;
     const found = scripts[name];
     if (found === undefined) {
@@ -548,9 +585,18 @@ function checkScripts(pkg, preset, gasTest) {
       });
     }
   }
+  if (isSelf && scripts['test:coverage'] === undefined) {
+    drift.push({ file, message: 'scripts.test:coverage is missing' });
+  }
   for (const name of template.present) {
     if (scripts[name] === undefined) {
       drift.push({ file, message: `scripts.${name} is missing` });
+    } else if (scripts[name] === placeholderScript(name)) {
+      drift.push({
+        file,
+        message: `scripts.${name} is a placeholder; replace it with the project's command`,
+        warning: true,
+      });
     }
   }
   return drift;
@@ -568,7 +614,7 @@ function checkLoadOrder(cwd, loadOrder) {
     .filter((entry) => !existsSync(join(cwd, 'src', entry)))
     .map((entry) => ({
       file: 'package.json',
-      message: `gasDevConfig.loadOrder: src/${entry} does not exist`,
+      message: `gasdev.loadOrder: src/${entry} does not exist`,
     }));
 }
 
@@ -589,13 +635,13 @@ function checkHtml(cwd, html, loadOrder) {
     if (!loadOrder.includes(out.slice('src/'.length))) {
       drift.push({
         file: 'package.json',
-        message: `gasDevConfig.loadOrder: ${out.slice('src/'.length)} (the output of ${entry}) is missing`,
+        message: `gasdev.loadOrder: ${out.slice('src/'.length)} (the output of ${entry}) is missing`,
       });
     }
     if (!existsSync(join(cwd, entry))) {
       drift.push({
         file: 'package.json',
-        message: `gasDevConfig.html: ${entry} does not exist`,
+        message: `gasdev.html: ${entry} does not exist`,
       });
       continue;
     }
@@ -604,7 +650,7 @@ function checkHtml(cwd, html, loadOrder) {
       if (state !== 'current') {
         drift.push({
           file: out,
-          message: `${state === 'missing' ? 'file is missing' : 'is out of date'}: run gas-dev-config html`,
+          message: `${state === 'missing' ? 'file is missing' : 'is out of date'}: run gasdev html`,
         });
       }
     } catch (error) {
@@ -629,11 +675,11 @@ function readPackage(cwd) {
 }
 
 /**
- * Reads and validates the `gasDevConfig` field of a project's package.json.
+ * Reads and validates the `gasdev` field of a project's package.json.
  *
  * @param {string} cwd Project root.
  * @returns {ResolvedConfig}
- * @throws {CheckError} When package.json or the `gasDevConfig` field is unusable or invalid.
+ * @throws {CheckError} When package.json or the `gasdev` field is unusable or invalid.
  */
 export function loadConfig(cwd) {
   return resolveConfig(readPackage(cwd));
@@ -641,11 +687,11 @@ export function loadConfig(cwd) {
 
 /**
  * Compares a project's non-extendable configuration with the preset templates
- * and validates its `gasDevConfig.loadOrder` files. Never writes.
+ * and validates its `gasdev.loadOrder` files. Never writes.
  *
  * @param {string} cwd Project root.
  * @returns {{ preset: string, drift: Drift[] }}
- * @throws {CheckError} When package.json or the `gasDevConfig` field is unusable or invalid.
+ * @throws {CheckError} When package.json or the `gasdev` field is unusable or invalid.
  */
 export function checkProject(cwd) {
   const pkg = readPackage(cwd);
@@ -659,23 +705,6 @@ export function checkProject(cwd) {
     ...(loadOrder && html ? checkHtml(cwd, html, loadOrder) : []),
   ];
   return { preset, drift };
-}
-
-/**
- * Appends the template lines missing from `.gitignore` and `.prettierignore`,
- * creating either file when absent. The configuration is validated first, so an
- * invalid one writes nothing.
- *
- * @param {string} cwd Project root.
- * @returns {string[]} One message per change, `.gitignore` first.
- * @throws {CheckError} When package.json or the `gasDevConfig` field is unusable or invalid.
- */
-export function fixProject(cwd) {
-  const { preset } = loadConfig(cwd);
-  return [
-    ...fixIgnoreFile(cwd, preset, '.gitignore'),
-    ...fixIgnoreFile(cwd, preset, '.prettierignore'),
-  ];
 }
 
 /**
@@ -695,8 +724,9 @@ function createDependabot(cwd, preset) {
 }
 
 /**
- * Adds the required scripts missing from package.json, after the existing
- * ones. Existing scripts are never changed.
+ * Adds the required scripts missing from package.json, then a placeholder for
+ * each missing script that must only be present, after the existing ones.
+ * Existing scripts are never changed.
  *
  * @param {string} cwd
  * @param {Record<string, unknown>} pkg Parsed package.json.
@@ -713,21 +743,35 @@ function addScripts(cwd, pkg, preset, gasTest) {
   const missing = Object.entries(required).filter(
     ([name]) => scripts[name] === undefined,
   );
-  if (missing.length === 0) return [];
-  pkg['scripts'] = { ...scripts, ...Object.fromEntries(missing) };
+  const placeholders = template.present
+    .filter((name) => scripts[name] === undefined)
+    .map((name) => [name, placeholderScript(name)]);
+  if (missing.length === 0 && placeholders.length === 0) return [];
+  pkg['scripts'] = {
+    ...scripts,
+    ...Object.fromEntries(missing),
+    ...Object.fromEntries(placeholders),
+  };
   writeFileSync(join(cwd, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
-  return missing.map(([name]) => `package.json: added scripts.${name}`);
+  return [
+    ...missing.map(([name]) => `package.json: added scripts.${name}`),
+    ...placeholders.map(
+      ([name]) =>
+        `package.json: added a placeholder scripts.${name}; replace it with the project's command`,
+    ),
+  ];
 }
 
 /**
- * Scaffolds a project: applies the ignore-file fixes, creates
- * `.github/dependabot.yml` when absent and adds the missing required scripts.
+ * Scaffolds or repairs a project, for `init` and `check --fix`: applies the
+ * ignore-file fixes, creates `.github/dependabot.yml` when absent, adds the
+ * missing required scripts and adds placeholders for missing present-only ones.
  * Existing files and scripts are never overwritten. The configuration is
  * validated first, as is `scripts`, so an invalid one writes nothing.
  *
  * @param {string} cwd Project root.
  * @returns {string[]} One message per change.
- * @throws {CheckError} When package.json or the `gasDevConfig` field is unusable or invalid.
+ * @throws {CheckError} When package.json or the `gasdev` field is unusable or invalid.
  */
 export function initProject(cwd) {
   const pkg = readPackage(cwd);
@@ -745,23 +789,36 @@ export function initProject(cwd) {
 
 /**
  * Formats drift as one line per entry, grouped by file, followed by a summary.
+ * Warnings are listed but do not fail the check.
  *
  * @param {Drift[]} drift
+ * @param {{ fixed?: boolean }} [options] `fixed`: the fixes were applied first,
+ *   so every remaining issue needs a manual edit.
  * @returns {string[]}
  */
-export function formatReport(drift) {
-  if (drift.length === 0) return ['✓ Config check passed'];
+export function formatReport(drift, { fixed = false } = {}) {
   /** @type {string[]} */
   const lines = [];
-  const files = [...new Set(drift.map((d) => d.file))];
-  for (const file of files) {
+  for (const file of new Set(drift.map((d) => d.file))) {
     lines.push(file);
     for (const d of drift.filter((x) => x.file === file)) {
-      lines.push(`  ${d.message}`);
+      lines.push(`  ${d.warning ? 'warning: ' : ''}${d.message}`);
     }
   }
+  const errors = drift.filter((d) => !d.warning);
+  const warnings = drift.length - errors.length;
+  if (errors.length === 0) {
+    lines.push(
+      warnings === 0
+        ? '✓ Config check passed'
+        : `✓ Config check passed with ${warnings} warning(s)`,
+    );
+    return lines;
+  }
+  const files = new Set(errors.map((d) => d.file)).size;
   lines.push(
-    `✗ Config check failed: ${drift.length} issue(s) in ${files.length} file(s)`,
+    `✗ Config check failed: ${errors.length} issue(s) in ${files} file(s)` +
+      (fixed ? ' that --fix cannot fix; edit them manually' : ''),
   );
   return lines;
 }

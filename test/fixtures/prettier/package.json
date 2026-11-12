@@ -1,5 +1,5 @@
 {
   "name": "fixture",
   "private": true,
-  "prettier": "gas-dev-config/prettier"
+  "prettier": "gasdev/prettier"
 }

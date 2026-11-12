@@ -3,6 +3,6 @@
   "compilerOptions": {
     "noEmit": true,
     "declaration": false,
-    "types": ["google-apps-script", "gas-dev-config/gas-test/runtime"]
+    "types": ["google-apps-script", "gasdev/gas-test/runtime"]
   }
 }

@@ -1,3 +1,3 @@
-import { createGasLoader } from 'gas-dev-config/test';
+import { createGasLoader } from 'gasdev/test';
 
 createGasLoader({ files: ['a.ts'] });

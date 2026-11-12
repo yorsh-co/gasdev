@@ -1,6 +1,7 @@
 # 6. Node engines
 
 - Status: Accepted
+- Amended by: [ADR 0021](0021-node-22-15-floor.md)
 - Date: 2026-11-04
 
 ## Context

@@ -10,9 +10,10 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { placeholderScript } from '../bin/check.js';
 import { REPO_ROOT } from './support.js';
 
-const BIN = join(REPO_ROOT, 'bin', 'gas-dev-config.js');
+const BIN = join(REPO_ROOT, 'bin', 'gasdev.js');
 const TEMPLATES = join(REPO_ROOT, 'templates');
 
 /** @type {string[]} */
@@ -31,7 +32,7 @@ afterEach(() => {
  * @returns {string} Project directory.
  */
 function createCleanProject(preset, pkgExtra = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'gas-dev-config-check-'));
+  const dir = mkdtempSync(join(tmpdir(), 'gasdev-check-'));
   dirs.push(dir);
   const read = (/** @type {string} */ f) =>
     readFileSync(join(TEMPLATES, preset, f), 'utf8');
@@ -43,7 +44,7 @@ function createCleanProject(preset, pkgExtra = {}) {
     read('.github/dependabot.yml'),
   );
   const { required, present, gasTest } = JSON.parse(read('scripts.json'));
-  const configured = /** @type {any} */ (pkgExtra.gasDevConfig)?.gasTest;
+  const configured = /** @type {any} */ (pkgExtra.gasdev)?.gasTest;
   const scripts = { ...required, ...(configured && gasTest) };
   for (const name of present) scripts[name] = 'true';
   writePackage(dir, { name: 'consumer', scripts, ...pkgExtra });
@@ -86,7 +87,7 @@ describe.each(['gas', 'node'])('check (%s preset)', (preset) => {
   const make = () =>
     createCleanProject(
       /** @type {'gas' | 'node'} */ (preset),
-      preset === 'node' ? { gasDevConfig: { preset: 'node' } } : {},
+      preset === 'node' ? { gasdev: { preset: 'node' } } : {},
     );
 
   it('passes on a project matching the templates', () => {
@@ -176,7 +177,7 @@ describe.each(['gas', 'node'])('check (%s preset)', (preset) => {
     const result = run(dir, ['check']);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('scripts.check differs; expected: npm run');
-    expect(result.stderr).toContain('gas-dev-config check');
+    expect(result.stderr).toContain('gasdev check');
     expect(result.stderr).toContain('found: "npm run test"');
   });
 
@@ -319,9 +320,95 @@ describe.each(['gas', 'node'])('check (%s preset)', (preset) => {
       expect(result.stdout).toContain('.gitignore: added .worktrees/');
       expect(read(dir, '.gitignore')).toContain('.worktrees/');
       expect(result.stderr).toContain('.github/dependabot.yml');
-      expect(result.stderr).toContain('1 issue(s) in 1 file(s)');
+      expect(result.stderr).toContain(
+        '1 issue(s) in 1 file(s) that --fix cannot fix; edit them manually',
+      );
+    });
+
+    it('adds a missing required script', () => {
+      const dir = make();
+      const pkg = readPackage(dir);
+      const expected = pkg.scripts.lint;
+      delete pkg.scripts.lint;
+      writePackage(dir, pkg);
+      const result = run(dir, ['check', '--fix']);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('package.json: added scripts.lint');
+      expect(readPackage(dir).scripts.lint).toBe(expected);
+    });
+
+    it('creates a missing dependabot.yml', () => {
+      const dir = make();
+      rmSync(join(dir, '.github', 'dependabot.yml'));
+      const result = run(dir, ['check', '--fix']);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('.github/dependabot.yml: created');
     });
   });
+});
+
+describe('check (placeholder scripts)', () => {
+  const PRESENT = ['build', 'build:watch', 'typecheck'];
+
+  it('adds a failing placeholder for each missing present script with --fix', () => {
+    const dir = createCleanProject('gas');
+    const pkg = readPackage(dir);
+    for (const name of PRESENT) delete pkg.scripts[name];
+    writePackage(dir, pkg);
+    const result = run(dir, ['check', '--fix']);
+    expect(result.status).toBe(0);
+    const scripts = readPackage(dir).scripts;
+    for (const name of PRESENT) {
+      expect(scripts[name]).toBe(placeholderScript(name));
+      expect(result.stdout).toContain(
+        `package.json: added a placeholder scripts.${name}; replace it`,
+      );
+      expect(result.stdout).toContain(
+        `  warning: scripts.${name} is a placeholder; replace it with the project's command\n`,
+      );
+    }
+    expect(result.stdout.trimEnd()).toMatch(
+      /✓ Config check passed with 3 warning\(s\)$/,
+    );
+  });
+
+  it('reports a placeholder as a warning without failing', () => {
+    const dir = createCleanProject('gas');
+    const pkg = readPackage(dir);
+    pkg.scripts.build = placeholderScript('build');
+    writePackage(dir, pkg);
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(
+      "package.json\n  warning: scripts.build is a placeholder; replace it with the project's command\n" +
+        '✓ Config check passed with 1 warning(s)\n',
+    );
+  });
+
+  it('still fails on other drift alongside a placeholder', () => {
+    const dir = createCleanProject('gas');
+    const pkg = readPackage(dir);
+    pkg.scripts.build = placeholderScript('build');
+    delete pkg.scripts.typecheck;
+    writePackage(dir, pkg);
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('warning: scripts.build is a placeholder');
+    expect(result.stderr).toContain('1 issue(s) in 1 file(s)\n');
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'exits non-zero with the replacement hint when run',
+    () => {
+      const result = spawnSync('sh', ['-c', placeholderScript('build')], {
+        encoding: 'utf8',
+      });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe(
+        'gasdev: replace the scripts.build placeholder in package.json\n',
+      );
+    },
+  );
 });
 
 describe('check (preset specifics)', () => {
@@ -337,7 +424,7 @@ describe('check (preset specifics)', () => {
 
   it('reports a missing typecheck script on the node preset', () => {
     const dir = createCleanProject('node', {
-      gasDevConfig: { preset: 'node' },
+      gasdev: { preset: 'node' },
     });
     const pkg = readPackage(dir);
     delete pkg.scripts.typecheck;
@@ -351,26 +438,71 @@ describe('check (preset specifics)', () => {
 
   it('defaults to the gas preset', () => {
     const dir = createCleanProject('gas');
-    expect(readPackage(dir).gasDevConfig).toBeUndefined();
+    expect(readPackage(dir).gasdev).toBeUndefined();
     expect(run(dir, ['check']).status).toBe(0);
   });
 
-  it('accepts the local bin in this package itself', () => {
+  it('accepts the local bin and coverage gate in this package itself', () => {
     const dir = createCleanProject('node', {
-      gasDevConfig: { preset: 'node' },
+      gasdev: { preset: 'node' },
     });
     const pkg = readPackage(dir);
-    pkg.name = 'gas-dev-config';
-    pkg.scripts.check = pkg.scripts.check.replace(
-      'gas-dev-config check',
-      'node bin/gas-dev-config.js check',
-    );
+    pkg.name = 'gasdev';
+    pkg.scripts.check = pkg.scripts.check
+      .replace('gasdev check', 'node bin/gasdev.js check')
+      .replace('npm run test &&', 'npm run test:coverage &&');
+    pkg.scripts['test:coverage'] = 'vitest run --coverage';
     writePackage(dir, pkg);
     expect(run(dir, ['check']).status).toBe(0);
   });
 
+  it('requires the coverage gate in this package itself', () => {
+    const dir = createCleanProject('node', {
+      gasdev: { preset: 'node' },
+    });
+    const pkg = readPackage(dir);
+    pkg.name = 'gasdev';
+    pkg.scripts.check = pkg.scripts.check.replace(
+      'gasdev check',
+      'node bin/gasdev.js check',
+    );
+    writePackage(dir, pkg);
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('npm run test:coverage &&');
+  });
+
+  it('requires the test:coverage script in this package itself', () => {
+    const dir = createCleanProject('node', {
+      gasdev: { preset: 'node' },
+    });
+    const pkg = readPackage(dir);
+    pkg.name = 'gasdev';
+    pkg.scripts.check = pkg.scripts.check
+      .replace('gasdev check', 'node bin/gasdev.js check')
+      .replace('npm run test &&', 'npm run test:coverage &&');
+    writePackage(dir, pkg);
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('scripts.test:coverage is missing');
+  });
+
+  it.each([
+    ['gasDevConfig', 'gasdev'],
+    ['gasDevBundle', 'gasdev.bundle'],
+    ['gasDevRelease', 'gasdev.release'],
+    ['gasDevCi', 'gasdev.ci'],
+  ])('rejects the legacy %s key', (legacy, replacement) => {
+    const dir = createCleanProject('gas', { [legacy]: {} });
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`"${legacy}"`);
+    expect(result.stderr).toContain(`"${replacement}"`);
+    expect(result.stderr).toContain('Migrating to 3.0');
+  });
+
   it('fails on an unknown preset', () => {
-    const dir = createCleanProject('gas', { gasDevConfig: { preset: 'web' } });
+    const dir = createCleanProject('gas', { gasdev: { preset: 'web' } });
     const result = run(dir, ['check']);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('unknown preset "web"');
@@ -378,7 +510,7 @@ describe('check (preset specifics)', () => {
 
   it('writes nothing with --fix when the config is invalid', () => {
     const dir = createCleanProject('gas', {
-      gasDevConfig: { preset: 'bogus' },
+      gasdev: { preset: 'bogus' },
     });
     const file = join(dir, '.gitignore');
     const before = readFileSync(file, 'utf8').replace('.worktrees/\n', '');
@@ -388,18 +520,60 @@ describe('check (preset specifics)', () => {
     expect(readFileSync(file, 'utf8')).toBe(before);
   });
 
-  it('fails on an unknown gasDevConfig key', () => {
-    const dir = createCleanProject('gas', { gasDevConfig: { presets: 'gas' } });
+  it('fails on an unknown gasdev key', () => {
+    const dir = createCleanProject('gas', { gasdev: { presets: 'gas' } });
     const result = run(dir, ['check']);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('unknown "gasDevConfig" key(s): presets');
+    expect(result.stderr).toContain('unknown "gasdev" key(s): presets');
     expect(result.stderr).toContain(
-      '(expected: preset, loadOrder, peers, gasTest, html)',
+      '(expected: preset, loadOrder, peers, gasTest, html, bundle, release, ci)',
     );
   });
 
+  it('accepts a gasdev.bundle object', () => {
+    const dir = createCleanProject('gas', {
+      gasdev: { bundle: { libraries: {} } },
+    });
+    expect(run(dir, ['check']).status).toBe(0);
+  });
+
+  it('rejects a non-object gasdev.bundle', () => {
+    const dir = createCleanProject('gas', { gasdev: { bundle: 'x' } });
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('"gasdev.bundle" must be an object');
+  });
+
+  it('accepts a gasdev.release object', () => {
+    const dir = createCleanProject('gas', {
+      gasdev: { release: { githubRelease: true } },
+    });
+    expect(run(dir, ['check']).status).toBe(0);
+  });
+
+  it('rejects a non-object gasdev.release', () => {
+    const dir = createCleanProject('gas', { gasdev: { release: 'x' } });
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('"gasdev.release" must be an object');
+  });
+
+  it('accepts a gasdev.ci object', () => {
+    const dir = createCleanProject('gas', {
+      gasdev: { ci: { title: 'App' } },
+    });
+    expect(run(dir, ['check']).status).toBe(0);
+  });
+
+  it('rejects a non-object gasdev.ci', () => {
+    const dir = createCleanProject('gas', { gasdev: { ci: 'x' } });
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('"gasdev.ci" must be an object');
+  });
+
   it('fails when package.json is missing', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'gas-dev-config-check-'));
+    const dir = mkdtempSync(join(tmpdir(), 'gasdev-check-'));
     dirs.push(dir);
     const result = run(dir, ['check']);
     expect(result.status).toBe(1);
@@ -409,12 +583,12 @@ describe('check (preset specifics)', () => {
 
 describe('check (loadOrder and peers)', () => {
   /**
-   * @param {Record<string, unknown>} gasDevConfig
+   * @param {Record<string, unknown>} gasdev
    * @param {'gas' | 'node'} [preset]
    * @param {string[]} [srcFiles] Files created under src/.
    */
-  function make(gasDevConfig, preset = 'gas', srcFiles = ['a.ts', 'lib/b.ts']) {
-    const dir = createCleanProject(preset, { gasDevConfig });
+  function make(gasdev, preset = 'gas', srcFiles = ['a.ts', 'lib/b.ts']) {
+    const dir = createCleanProject(preset, { gasdev });
     for (const file of srcFiles) {
       mkdirSync(dirname(join(dir, 'src', file)), { recursive: true });
       writeFileSync(join(dir, 'src', file), '');
@@ -437,7 +611,7 @@ describe('check (loadOrder and peers)', () => {
     const result = run(dir, ['check']);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      'package.json\n  gasDevConfig.loadOrder: src/missing.ts does not exist',
+      'package.json\n  gasdev.loadOrder: src/missing.ts does not exist',
     );
     expect(result.stderr).toContain('1 issue(s) in 1 file(s)');
   });
@@ -458,7 +632,7 @@ describe('check (loadOrder and peers)', () => {
   ])('rejects loadOrder with %s', (_name, loadOrder, message) => {
     const result = run(make({ loadOrder }), ['check']);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('package.json: "gasDevConfig.loadOrder"');
+    expect(result.stderr).toContain('package.json: "gasdev.loadOrder"');
     expect(result.stderr).toContain(message);
   });
 
@@ -479,7 +653,7 @@ describe('check (loadOrder and peers)', () => {
   ])('rejects peers with %s', (_name, peers, message) => {
     const result = run(make({ peers }), ['check']);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('package.json: "gasDevConfig.peers"');
+    expect(result.stderr).toContain('package.json: "gasdev.peers"');
     expect(result.stderr).toContain(message);
   });
 
@@ -491,7 +665,7 @@ describe('check (loadOrder and peers)', () => {
     const result = run(dir, ['check']);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      `package.json: "gasDevConfig.${key}" requires the gas preset`,
+      `package.json: "gasdev.${key}" requires the gas preset`,
     );
   });
 });
@@ -499,9 +673,9 @@ describe('check (loadOrder and peers)', () => {
 describe('check (gasTest)', () => {
   const scopes = ['https://www.googleapis.com/auth/spreadsheets'];
 
-  /** @param {Record<string, unknown>} gasDevConfig */
-  function make(gasDevConfig) {
-    const dir = createCleanProject('gas', { gasDevConfig });
+  /** @param {Record<string, unknown>} gasdev */
+  function make(gasdev) {
+    const dir = createCleanProject('gas', { gasdev });
     mkdirSync(join(dir, 'src'));
     writeFileSync(join(dir, 'src', 'a.ts'), '');
     return dir;
@@ -519,7 +693,7 @@ describe('check (gasTest)', () => {
 
   it.each([
     ['a non-object', ['x'], 'must be an object'],
-    ['an unknown key', { scopes, nope: 1 }, '"gasDevConfig.gasTest.nope"'],
+    ['an unknown key', { scopes, nope: 1 }, '"gasdev.gasTest.nope"'],
     ['missing scopes', {}, '.scopes must be a non-empty array'],
     ['empty scopes', { scopes: [] }, '.scopes must be a non-empty array'],
     [
@@ -569,10 +743,10 @@ describe('check (gasTest)', () => {
       const result = run(dir, ['check']);
       expect(result.status).toBe(1);
       expect(result.stderr).toContain(
-        'scripts.test:gas:build is missing; expected: gas-dev-config gas-test build',
+        'scripts.test:gas:build is missing; expected: gasdev gas-test build',
       );
       expect(result.stderr).toContain(
-        'scripts.test:gas is missing; expected: gas-dev-config gas-test run',
+        'scripts.test:gas is missing; expected: gasdev gas-test run',
       );
       expect(result.stderr).toContain('2 issue(s) in 1 file(s)');
     });
@@ -584,7 +758,7 @@ describe('check (gasTest)', () => {
       const result = run(dir, ['check']);
       expect(result.status).toBe(1);
       expect(result.stderr).toContain(
-        'scripts.test:gas differs; expected: gas-dev-config gas-test run; found: "clasp run"',
+        'scripts.test:gas differs; expected: gasdev gas-test run; found: "clasp run"',
       );
     });
 
@@ -609,19 +783,17 @@ describe('check (gasTest)', () => {
     const result = run(make({ gasTest: { scopes } }), ['check']);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      '"gasDevConfig.gasTest" requires "gasDevConfig.loadOrder"',
+      '"gasdev.gasTest" requires "gasdev.loadOrder"',
     );
   });
 
   it('rejects gasTest with the node preset', () => {
     const dir = createCleanProject('node', {
-      gasDevConfig: { preset: 'node', gasTest: { scopes } },
+      gasdev: { preset: 'node', gasTest: { scopes } },
     });
     const result = run(dir, ['check']);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain(
-      '"gasDevConfig.gasTest" requires the gas preset',
-    );
+    expect(result.stderr).toContain('"gasdev.gasTest" requires the gas preset');
   });
 });
 
@@ -637,11 +809,11 @@ describe('init', () => {
    * @returns {string} Project directory containing only package.json.
    */
   function createEmptyProject(preset, extra = {}) {
-    const dir = mkdtempSync(join(tmpdir(), 'gas-dev-config-init-'));
+    const dir = mkdtempSync(join(tmpdir(), 'gasdev-init-'));
     dirs.push(dir);
     writePackage(dir, {
       name: 'consumer',
-      ...(preset === 'node' && { gasDevConfig: { preset } }),
+      ...(preset === 'node' && { gasdev: { preset } }),
       ...extra,
     });
     return dir;
@@ -664,40 +836,43 @@ describe('init', () => {
         expect(result.stdout).toContain(`${file}: created`);
       }
       const { required, present } = scriptsOf(preset);
+      const placeholders = Object.fromEntries(
+        present.map((/** @type {string} */ n) => [n, placeholderScript(n)]),
+      );
       const pkg = readPackage(dir);
-      expect(pkg.scripts).toEqual(required);
-      expect(Object.keys(pkg.scripts)).toEqual(Object.keys(required));
+      expect(pkg.scripts).toEqual({ ...required, ...placeholders });
+      expect(Object.keys(pkg.scripts)).toEqual([
+        ...Object.keys(required),
+        ...present,
+      ]);
       for (const name of Object.keys(required)) {
         expect(result.stdout).toContain(`package.json: added scripts.${name}`);
       }
       expect(readFileSync(join(dir, 'package.json'), 'utf8')).toMatch(/\n$/);
-      if (p === 'node') {
-        expect(result.status).toBe(0);
-        expect(result.stdout.trimEnd().endsWith('✓ Config check passed')).toBe(
-          true,
-        );
-      } else {
-        expect(result.status).toBe(1);
-        const reported = result.stderr
-          .split('\n')
-          .filter((l) => l.startsWith('  '))
-          .map((l) => l.trim());
-        expect(reported).toEqual(
-          present.map((/** @type {string} */ n) => `scripts.${n} is missing`),
-        );
-      }
+      expect(result.status).toBe(0);
+      const reported = result.stdout
+        .split('\n')
+        .filter((l) => l.startsWith('  '))
+        .map((l) => l.trim());
+      expect(reported).toEqual(
+        present.map(
+          (/** @type {string} */ n) =>
+            `warning: scripts.${n} is a placeholder; replace it with the project's command`,
+        ),
+      );
     });
 
     it('keeps differing scripts and appends missing ones in order', () => {
       const dir = createEmptyProject(p, { scripts: { test: 'jest' } });
       const result = run(dir, ['init']);
-      const { required } = scriptsOf(preset);
+      const { required, present } = scriptsOf(preset);
       const names = Object.keys(required);
       const pkg = readPackage(dir);
       expect(pkg.scripts.test).toBe('jest');
       expect(Object.keys(pkg.scripts)).toEqual([
         'test',
         ...names.filter((n) => n !== 'test'),
+        ...present,
       ]);
       expect(result.stdout).not.toContain('added scripts.test\n');
       expect(result.stderr).toContain(
@@ -741,7 +916,7 @@ describe('init', () => {
     });
 
     it('writes nothing when the config is invalid', () => {
-      const dir = createEmptyProject(p, { gasDevConfig: { preset: 'bogus' } });
+      const dir = createEmptyProject(p, { gasdev: { preset: 'bogus' } });
       const before = readFileSync(join(dir, 'package.json'), 'utf8');
       const result = run(dir, ['init']);
       expect(result.status).toBe(1);
@@ -755,7 +930,7 @@ describe('init', () => {
   it('adds the gasTest scripts when gasTest is configured', () => {
     const scopes = ['https://www.googleapis.com/auth/spreadsheets'];
     const dir = createEmptyProject('gas', {
-      gasDevConfig: { loadOrder: ['a.ts'], gasTest: { scopes } },
+      gasdev: { loadOrder: ['a.ts'], gasTest: { scopes } },
     });
     const result = run(dir, ['init']);
     const { gasTest } = scriptsOf('gas');
@@ -800,6 +975,12 @@ describe('init', () => {
 });
 
 describe('CLI usage', () => {
+  it('lists every validated gasdev key in help', () => {
+    const result = run(REPO_ROOT, ['--help']);
+    expect(result.stdout).toContain('"bundle", "release" and "ci"');
+    expect(result.stdout).toContain('(gas preset only)');
+  });
+
   it('exits 2 without a command', () => {
     const result = run(REPO_ROOT, []);
     expect(result.status).toBe(2);
@@ -815,7 +996,7 @@ describe('CLI usage', () => {
   it('exits 2 on an unknown option', () => {
     const result = run(REPO_ROOT, ['check', '--bogus']);
     expect(result.status).toBe(2);
-    expect(result.stderr).toContain('Run gas-dev-config --help');
+    expect(result.stderr).toContain('Run gasdev --help');
   });
 
   it('exits 2 when --fix is used without check', () => {
@@ -829,9 +1010,9 @@ describe('CLI usage', () => {
   it('prints help', () => {
     const result = run(REPO_ROOT, ['--help']);
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('Usage: gas-dev-config check');
+    expect(result.stdout).toContain('Usage: gasdev check');
     expect(result.stdout).toContain('check [--fix]');
-    expect(result.stdout).toContain('gas-dev-config gas-test run [--keep]');
+    expect(result.stdout).toContain('gasdev gas-test run [--keep]');
   });
 
   it('prints the version', () => {

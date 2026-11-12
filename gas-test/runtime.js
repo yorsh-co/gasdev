@@ -1,6 +1,6 @@
 // Test runtime for Apps Script. A plain global script: it has no module syntax
 // and is concatenated with the library under test and its tests by
-// `gas-dev-config gas-test build`. Run `runGasTests` from the editor.
+// `gasdev gas-test build`. Run `runGasTests` from the editor.
 
 /** Marks the start of the encoded results in the value returned by `runGasTests`. */
 const GAS_TEST_START_ = '@@GAS_TEST@@';

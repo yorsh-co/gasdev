@@ -1,7 +1,7 @@
 {
   "required": {
     "clean": "rimraf dist",
-    "release": "gas-dev-release",
+    "release": "gasdev release",
     "build:format": "npm run check && npm run build && npm run format:dist",
     "build:release": "npm run build:format && npm run release",
     "lint": "eslint . && echo '✓ Lint passed'",
@@ -9,13 +9,13 @@
     "format": "prettier . --write",
     "format:dist": "prettier ./dist --write --ignore-path .prettierignore",
     "format:check": "prettier . --check",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && gas-dev-config check",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && gasdev check",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "present": ["build", "build:watch", "typecheck"],
   "gasTest": {
-    "test:gas:build": "gas-dev-config gas-test build",
-    "test:gas": "gas-dev-config gas-test run"
+    "test:gas:build": "gasdev gas-test build",
+    "test:gas": "gasdev gas-test run"
   }
 }

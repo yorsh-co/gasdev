@@ -30,7 +30,7 @@ describe('prettier config', () => {
 
   afterAll(() => project.cleanup());
 
-  it('resolves the "gas-dev-config/prettier" package.json specifier', async () => {
+  it('resolves the "gasdev/prettier" package.json specifier', async () => {
     const options = await prettier.resolveConfig(
       join(project.dir, 'sample.ts'),
     );

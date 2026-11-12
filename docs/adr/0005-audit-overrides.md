@@ -15,7 +15,7 @@ npm `overrides` apply only in the root project. They are ignored when the packag
 
 ## Decision
 
-Each consumer that installs `@google/clasp` declares the following in `package.json`, directly after `devDependencies`. gas-dev-config itself, which does not install clasp, and consumers without clasp declare `minimatch` only:
+Each consumer that installs `@google/clasp` declares the following in `package.json`, directly after `devDependencies`. Consumers without clasp declare `minimatch` only. gas-dev-config itself installs clasp as a devDependency for its deploy tests and declares both:
 
 ```json
 "overrides": {
@@ -34,5 +34,5 @@ Each consumer that installs `@google/clasp` declares the following in `package.j
 - Remove the `minimatch` override once eslint, `@eslint/config-array` and `@typescript-eslint/typescript-estree` accept minimatch 11.0.1 or later.
 - Remove the `gaxios` override once `googleapis-common` stops pinning gaxios 7.1.3.
 - Revisit the zod risk when clasp moves to zod 4.
-- The expected residual audit in consumers that install clasp is `@google/clasp` and `zod`, plus `gas-dev-config` as their parent. Consumers without clasp, and gas-dev-config itself, audit clean.
+- The expected residual audit in consumers that install clasp is `@google/clasp` and `zod`, plus `gas-dev-config` as their parent. gas-dev-config itself installs clasp and shows the same residual. Consumers without clasp audit clean.
 - Every consumer carries its own override block and must be updated when an override is removed.

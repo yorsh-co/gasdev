@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PeersError, runPeers } from '../bin/peers.js';
 import { REPO_ROOT } from './support.js';
 
-const BIN = join(REPO_ROOT, 'bin', 'gas-dev-config.js');
+const BIN = join(REPO_ROOT, 'bin', 'gasdev.js');
 
 /** @type {string[]} */
 const dirs = [];
@@ -26,7 +26,7 @@ afterEach(() => {
 
 /** @returns {string} A new temp directory. */
 function tempDir() {
-  const dir = mkdtempSync(join(tmpdir(), 'gas-dev-config-peers-'));
+  const dir = mkdtempSync(join(tmpdir(), 'gasdev-peers-'));
   dirs.push(dir);
   return dir;
 }
@@ -178,7 +178,7 @@ describe('runPeers', () => {
     expect(code).toBe(1);
     expect(readFileSync(path, 'utf8')).toBe('stale\n');
     expect(io.err()).toBe(
-      'src/internal/gas-lock.peer.types.d.ts is out of date with gas-lock@1.1.0: run gas-dev-config peers sync\n',
+      'src/internal/gas-lock.peer.types.d.ts is out of date with gas-lock@1.1.0: run gasdev peers sync\n',
     );
   });
 
@@ -215,7 +215,7 @@ describe('runPeers', () => {
   it('rejects unconfigured peers', () => {
     const { project } = setup();
     expect(() => runPeers(project, undefined)).toThrow(
-      'package.json: "gasDevConfig.peers" is not configured',
+      'package.json: "gasdev.peers" is not configured',
     );
   });
 
@@ -311,7 +311,7 @@ describe('CLI', () => {
     const result = run(['peers', 'sync']);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      'package.json: "gasDevConfig.peers" is not configured',
+      'package.json: "gasdev.peers" is not configured',
     );
   });
 });

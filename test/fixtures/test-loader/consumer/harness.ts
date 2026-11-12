@@ -1,4 +1,4 @@
-import { createGasLoader, loadOrderFiles } from 'gas-dev-config/test';
+import { createGasLoader, loadOrderFiles } from 'gasdev/test';
 
 interface Greeter {
   greet(name: string): string;

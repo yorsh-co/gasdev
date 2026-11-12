@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { compareRulesets, loadTemplates } from '../bin/github.js';
 import { REPO_ROOT } from './support.js';
 
-const BIN = join(REPO_ROOT, 'bin', 'gas-dev-config.js');
+const BIN = join(REPO_ROOT, 'bin', 'gasdev.js');
 
 /** Fake gh: logs calls and answers from the JSON state in $FAKE_GH_STATE. */
 const FAKE_GH = `#!/usr/bin/env node
@@ -73,13 +73,13 @@ afterEach(() => {
 
 /** @returns {string} */
 function tempDir() {
-  const dir = mkdtempSync(join(tmpdir(), 'gas-dev-config-github-'));
+  const dir = mkdtempSync(join(tmpdir(), 'gasdev-github-'));
   dirs.push(dir);
   return dir;
 }
 
 /**
- * Runs `gas-dev-config github` against a fake gh.
+ * Runs `gasdev github` against a fake gh.
  *
  * @param {object} state Fake gh state.
  * @param {string[]} [args]
@@ -126,7 +126,7 @@ function writes(calls) {
   return calls.filter((c) => c.args.includes('-X'));
 }
 
-describe('gas-dev-config github', () => {
+describe('gasdev github', () => {
   it('exits 0 and writes nothing when in sync', () => {
     const result = runGithub({ auth: true, rulesets: inSync() });
     expect(result.status).toBe(0);
@@ -139,7 +139,7 @@ describe('gas-dev-config github', () => {
     const result = runGithub({ auth: true, rulesets: inSync().slice(1) });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('✗ ruleset branches: missing');
-    expect(result.stderr).toContain('gas-dev-config github --fix');
+    expect(result.stderr).toContain('gasdev github --fix');
   });
 
   it('exits 1 naming the drifted field', () => {
@@ -209,7 +209,7 @@ describe('gas-dev-config github', () => {
   });
 });
 
-describe('gas-dev-config github --fix', () => {
+describe('gasdev github --fix', () => {
   const fix = ['github', '--fix'];
 
   it('POSTs a missing ruleset with the template body', () => {

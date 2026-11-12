@@ -12,25 +12,21 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BundleError, bundle } from 'gas-dev-bundle';
+import { BundleError, bundle } from '../src/bundle/index.js';
+import { resolveProjectClaspBin } from '../src/clasp-bin.js';
 import ts from 'typescript';
 import { loadConfig } from './check.js';
 
 /** Default location of the built script, relative to the project root. */
-const DEFAULT_OUT = join(
-  'node_modules',
-  '.cache',
-  'gas-dev-config',
-  'gas-test.js',
-);
+const DEFAULT_OUT = join('node_modules', '.cache', 'gasdev', 'gas-test.js');
 
 const RUNTIME = fileURLToPath(
   new URL('../gas-test/runtime.js', import.meta.url),
 );
 const RESULT = /@@GAS_TEST@@([A-Za-z0-9+/=]+)@@END@@/;
 const SCOPE_PROBLEM = /scope|PERMISSION_DENIED|insufficient/i;
-const INSTALL_HINT =
-  'clasp was not found on PATH. Install it with `npm install -D @google/clasp`, then run `clasp login`.';
+export const INSTALL_HINT =
+  '@google/clasp is not installed. Install it with `npm install -D @google/clasp`, then run `npx clasp login`.';
 
 /**
  * @typedef {object} TestResult
@@ -119,7 +115,7 @@ function testFiles(cwd) {
 
 /**
  * Builds the self-contained Apps Script test file: peers, the library in load
- * order, the test runtime and the tests, validated by `gas-dev-bundle`. The
+ * order, the test runtime and the tests, validated by the bundle module. The
  * first line is unique per build because `clasp push --force` skips the push
  * when every local file equals the remote, which would leave stale files.
  *
@@ -131,11 +127,11 @@ function testFiles(cwd) {
 export function buildGasTest(cwd, { loadOrder, peers }) {
   if (!loadOrder) {
     throw new GasTestError(
-      'package.json: "gasDevConfig.loadOrder" is required by gas-test',
+      'package.json: "gasdev.loadOrder" is required by gas-test',
     );
   }
   const tests = testFiles(cwd);
-  const tmp = mkdtempSync(join(tmpdir(), 'gas-dev-config-build-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'gasdev-build-'));
   try {
     const library = transpileAll(
       loadOrder.map((file) => join(cwd, 'src', file)),
@@ -148,7 +144,7 @@ export function buildGasTest(cwd, { loadOrder, peers }) {
       extraFiles: [...library, RUNTIME, ...compiled],
     });
     const stamp = `${new Date().toISOString()} ${randomBytes(8).toString('hex')}`;
-    return `// gas-dev-config gas-test build ${stamp}\n${code}`;
+    return `// gasdev gas-test build ${stamp}\n${code}`;
   } catch (error) {
     if (error instanceof BundleError) {
       throw new GasTestError(error.message, { cause: error });
@@ -163,7 +159,7 @@ export function buildGasTest(cwd, { loadOrder, peers }) {
  * `gas-test build`: writes the script and prints its path.
  *
  * @param {string} cwd Project root.
- * @param {{ out?: string | undefined }} options `out` defaults to `node_modules/.cache/gas-dev-config/gas-test.js`.
+ * @param {{ out?: string | undefined }} options `out` defaults to `node_modules/.cache/gasdev/gas-test.js`.
  * @returns {number} The exit code.
  * @throws {GasTestError} On an unusable project.
  */
@@ -179,26 +175,38 @@ export function runBuild(cwd, { out }) {
 }
 
 /**
- * Runs clasp without a shell.
+ * Locates clasp: the project's own install first, then the one next to this package.
  *
+ * @param {string} root Project root.
+ * @param {(from?: string | URL) => string} [resolve] Bin resolver.
+ * @returns {string}
+ * @throws {GasTestError} When clasp is not installed.
+ */
+export function claspBin(root, resolve) {
+  try {
+    return resolveProjectClaspBin(root, resolve);
+  } catch {
+    throw new GasTestError(INSTALL_HINT);
+  }
+}
+
+/**
+ * Runs clasp through the current Node binary, without a shell or PATH lookup.
+ *
+ * @param {string} bin Path of the clasp bin script.
  * @param {string[]} args
  * @param {string} cwd
  * @returns {import('node:child_process').SpawnSyncReturns<string>}
  * @throws {GasTestError} When clasp cannot be started.
  */
-function clasp(args, cwd) {
-  const result = spawnSync('clasp', args, {
+function clasp(bin, args, cwd) {
+  const result = spawnSync(process.execPath, [bin, ...args], {
     cwd,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
   if (result.error) {
-    const { code, message } = /** @type {Error & { code?: string }} */ (
-      result.error
-    );
-    throw new GasTestError(
-      code === 'ENOENT' ? INSTALL_HINT : `cannot run clasp: ${message}`,
-    );
+    throw new GasTestError(`cannot run clasp: ${result.error.message}`);
   }
   return result;
 }
@@ -214,12 +222,13 @@ function output(result) {
 /**
  * Runs a clasp command that must succeed.
  *
+ * @param {string} bin
  * @param {string[]} args
  * @param {string} cwd
  * @throws {GasTestError} With clasp's output when it exits non-zero.
  */
-function claspStep(args, cwd) {
-  const result = clasp(args, cwd);
+function claspStep(bin, args, cwd) {
+  const result = clasp(bin, args, cwd);
   if (result.status !== 0) {
     throw new GasTestError(
       `clasp ${args[0]} failed (exit ${result.status}):\n${output(result)}`,
@@ -232,14 +241,15 @@ function claspStep(args, cwd) {
  * `clasp clone` writes `.clasp.json`; everything else it fetched is removed so
  * `clasp push --force` replaces the whole project.
  *
+ * @param {string} bin Path of the clasp bin script.
  * @param {string} dir Empty directory.
  * @param {string} scriptId
  * @param {string[]} scopes
  * @param {string} code The built script.
  * @throws {GasTestError} When clasp fails.
  */
-function prepareProject(dir, scriptId, scopes, code) {
-  claspStep(['clone', scriptId, '--rootDir', dir], dir);
+function prepareProject(bin, dir, scriptId, scopes, code) {
+  claspStep(bin, ['clone', scriptId, '--rootDir', dir], dir);
   for (const name of readdirSync(dir)) {
     if (name !== '.clasp.json') rmSync(join(dir, name), { recursive: true });
   }
@@ -315,24 +325,26 @@ export function runRun(cwd, { keep = false }) {
   const config = loadConfig(cwd);
   if (!config.gasTest) {
     throw new GasTestError(
-      'package.json: "gasDevConfig.gasTest" is required by gas-test run',
+      'package.json: "gasdev.gasTest" is required by gas-test run',
     );
   }
   const { scopes } = config.gasTest;
   const scriptId = process.env['GAS_TEST_SCRIPT_ID'] || config.gasTest.scriptId;
   if (!scriptId) {
     throw new GasTestError(
-      'no script ID: set GAS_TEST_SCRIPT_ID or "gasDevConfig.gasTest.scriptId"',
+      'no script ID: set GAS_TEST_SCRIPT_ID or "gasdev.gasTest.scriptId"',
     );
   }
   const spreadsheetId = process.env['GAS_TEST_SPREADSHEET_ID'] || undefined;
   const code = buildGasTest(cwd, config);
+  const bin = claspBin(cwd);
 
-  const dir = mkdtempSync(join(tmpdir(), 'gas-dev-config-run-'));
+  const dir = mkdtempSync(join(tmpdir(), 'gasdev-run-'));
   try {
-    prepareProject(dir, scriptId, scopes, code);
-    claspStep(['push', '--force'], dir);
+    prepareProject(bin, dir, scriptId, scopes, code);
+    claspStep(bin, ['push', '--force'], dir);
     const run = clasp(
+      bin,
       [
         'run',
         'runGasTests',
@@ -344,12 +356,10 @@ export function runRun(cwd, { keep = false }) {
     if (!decoded) {
       const text = output(run);
       process.stderr.write(`${text}\n`);
-      process.stderr.write(
-        'gas-dev-config: clasp run returned no test results.\n',
-      );
+      process.stderr.write('gasdev: clasp run returned no test results.\n');
       if (SCOPE_PROBLEM.test(text)) {
         process.stderr.write(
-          `The OAuth scopes may be missing. Run: clasp login --extra-scopes ${scopes.join(',')}\n`,
+          `The OAuth scopes may be missing. Run: npx clasp login --extra-scopes ${scopes.join(',')}\n`,
         );
       }
       return 1;

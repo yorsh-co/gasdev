@@ -51,7 +51,7 @@ function compile(dir, config, file) {
   writeFileSync(
     join(dir, 'tsconfig.json'),
     JSON.stringify({
-      extends: `gas-dev-config/tsconfig/${config}.json`,
+      extends: `gasdev/tsconfig/${config}.json`,
       compilerOptions: { noEmit: true },
       include: [file],
     }),
@@ -102,7 +102,7 @@ describe('tsconfig/gas.json', () => {
     writeFileSync(
       join(project.dir, 'tsconfig.json'),
       JSON.stringify({
-        extends: 'gas-dev-config/tsconfig/gas.json',
+        extends: 'gasdev/tsconfig/gas.json',
         include: ['ok.ts'],
       }),
     );
@@ -122,7 +122,7 @@ describe('tsconfig/gas.json', () => {
     writeFileSync(
       join(project.dir, 'tsconfig.json'),
       JSON.stringify({
-        extends: 'gas-dev-config/tsconfig/gas.json',
+        extends: 'gasdev/tsconfig/gas.json',
         compilerOptions: { outDir: 'out', declaration: false },
         include: ['es2021.ts'],
       }),

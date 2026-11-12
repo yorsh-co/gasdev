@@ -1,0 +1,65 @@
+name: GAS deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment that holds CLASPRC_JSON and the GAS_* variables.
+        type: string
+        required: true
+      node-version:
+        description: Node.js version used to build and deploy.
+        type: string
+        default: '22'
+      check:
+        description: Command that runs lint, type checks and tests.
+        type: string
+        default: npm run check
+      build:
+        description: Command that builds the project into its rootDir.
+        type: string
+        default: npm run build
+    secrets:
+      CLASPRC_JSON:
+        description: Contents of ~/.clasprc.json. Resolved from the environment secrets when the caller does not pass it.
+        required: false
+    outputs:
+      url:
+        description: Web app URL of the redeployed version, empty for a push-only deploy.
+        value: ${{ jobs.deploy.outputs.url }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gas-deploy-${{ github.repository }}-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: eval "$GAS_CHECK"
+        env:
+          GAS_CHECK: ${{ inputs.check }}
+      - run: eval "$GAS_BUILD"
+        env:
+          GAS_BUILD: ${{ inputs.build }}
+      - id: deploy
+        run: npx --no-install gasdev deploy
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          GAS_SCRIPT_ID: ${{ vars.GAS_SCRIPT_ID }}
+          GAS_DEPLOYMENT_ID: ${{ vars.GAS_DEPLOYMENT_ID }}

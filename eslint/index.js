@@ -27,7 +27,7 @@ import tseslint from 'typescript-eslint';
 const KNOWN_OPTIONS = ['preset', 'ignores', 'web', 'cwd'];
 const PRESETS = ['gas', 'node'];
 
-/** Globals defined by `gas-dev-config/gas-test`'s runtime. */
+/** Globals defined by `gasdev/gas-test`'s runtime. */
 const GAS_TEST_GLOBALS = /** @type {const} */ ({
   test: 'readonly',
   info: 'readonly',
