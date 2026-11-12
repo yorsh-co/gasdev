@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+---
+
+## [3.0.0] - 2026-11-12
+
 ### Added
 
 - `gasdev dev` live-reload server for HtmlService pages (`--port`, default 5173); `data-dev-only` elements are kept; see ADR 0026
