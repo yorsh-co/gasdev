@@ -171,14 +171,30 @@ export async function runDev(cwd, entries, { port }) {
     clearTimeout(timer);
     timer = setTimeout(reload, 50);
   };
-  const dirs = new Set(entries.map((e) => dirname(resolve(cwd, e.entry))));
-  const watchers = [...dirs].map((dir) =>
-    watch(dir, { recursive: true }, onChange),
-  );
+  /** @type {import('node:fs').FSWatcher[]} */
+  const watchers = [];
   const closeWatchers = () => {
     clearTimeout(timer);
     for (const watcher of watchers) watcher.close();
   };
+  const dirs = new Map(
+    entries.map((e) => [dirname(resolve(cwd, e.entry)), e.entry]),
+  );
+  for (const [dir, entry] of dirs) {
+    try {
+      const watcher = watch(dir, { recursive: true }, onChange);
+      watcher.on('error', (error) => {
+        process.stderr.write(`gasdev dev: ${error.message}\n`);
+      });
+      watchers.push(watcher);
+    } catch (error) {
+      closeWatchers();
+      if (/** @type {NodeJS.ErrnoException} */ (error).code === 'ENOENT') {
+        throw new DevError(`${entry}: directory not found`);
+      }
+      throw error;
+    }
+  }
 
   try {
     await new Promise((resolveListen, reject) => {
@@ -197,10 +213,15 @@ export async function runDev(cwd, entries, { port }) {
   );
   process.stdout.write(`gasdev dev: http://127.0.0.1:${bound}/\n`);
 
+  /** @type {() => void} */
+  let onSignal = () => {};
   await new Promise((resolveSignal) => {
-    process.once('SIGINT', resolveSignal);
-    process.once('SIGTERM', resolveSignal);
+    onSignal = () => resolveSignal(undefined);
+    process.on('SIGINT', onSignal);
+    process.on('SIGTERM', onSignal);
   });
+  process.off('SIGINT', onSignal);
+  process.off('SIGTERM', onSignal);
   closeWatchers();
   server.closeAllConnections();
   await new Promise((resolveClose) => server.close(resolveClose));

@@ -66,6 +66,16 @@ function rawGet(base, path, headers) {
   });
 }
 
+/**
+ * @param {ReadableStreamDefaultReader} reader
+ * @param {TextDecoder} decoder
+ */
+async function readChunk(reader, decoder) {
+  const { done, value } = await reader.read();
+  if (done) throw new Error('SSE stream ended before the expected event');
+  return decoder.decode(value);
+}
+
 describe('createDevServer', () => {
   it('serves the page at the root for a single entry', async () => {
     const { base } = await start(APP, [ENTRY]);
@@ -166,11 +176,11 @@ describe('createDevServer', () => {
     const decoder = new TextDecoder();
     let text = '';
     while (!text.includes(': connected')) {
-      text += decoder.decode((await reader.read()).value);
+      text += await readChunk(reader, decoder);
     }
     reload();
     while (!text.includes('event: reload')) {
-      text += decoder.decode((await reader.read()).value);
+      text += await readChunk(reader, decoder);
     }
     await reader.cancel();
     expect(text).toContain('event: reload');
@@ -219,12 +229,48 @@ describe('runDev', () => {
     const decoder = new TextDecoder();
     let text = '';
     while (!text.includes(': connected')) {
-      text += decoder.decode((await reader.read()).value);
+      text += await readChunk(reader, decoder);
     }
     writeFileSync(join(dir, 'src', 'web', 'app.css'), 'body { color: red; }');
     while (!text.includes('event: reload')) {
-      text += decoder.decode((await reader.read()).value);
+      text += await readChunk(reader, decoder);
     }
+    process.emit('SIGINT');
+    expect(await done).toBe(0);
+  });
+
+  it('rejects an entry in a missing directory', async () => {
+    const config = [
+      { entry: 'missing/app.html', out: 'out.ts', name: '_APP_HTML' },
+    ];
+    const error = await runDev(APP, config, { port: 0 }).catch((e) => e);
+    expect(error).toBeInstanceOf(DevError);
+    expect(error.message).toMatch(/directory not found/);
+  });
+
+  it('keeps serving when a watched directory is removed', async () => {
+    const dir = createApp();
+    let output = '';
+    const write = process.stdout.write.bind(process.stdout);
+    process.stdout.write = /** @type {typeof process.stdout.write} */ (
+      (chunk) => {
+        output += String(chunk);
+        return true;
+      }
+    );
+    const done = runDev(dir, CONFIG, { port: 0 });
+    let base;
+    try {
+      while (!output.includes('\n'))
+        await new Promise((r) => setTimeout(r, 10));
+      base = output.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0];
+    } finally {
+      process.stdout.write = write;
+    }
+    rmSync(join(dir, 'src', 'web'), { recursive: true });
+    await new Promise((r) => setTimeout(r, 200));
+    const res = await fetch(`${base}/`);
+    expect(res.status).toBeGreaterThan(0);
     process.emit('SIGINT');
     expect(await done).toBe(0);
   });
