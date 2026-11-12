@@ -51,7 +51,7 @@
 - README setup steps name `eslint`, `prettier`, `typescript` and the optional `@google/clasp` as the npm peer dependencies to install with `gasdev`
 - Dev-only: the eslint preset tests spawn the ESLint CLI without vitest's subprocess coverage env, so they no longer time out under `npm run test:coverage`
 - `gasdev bundle` rejects a library whose dist tag has a `gasLibrary.loadOrder` file or `.d.ts` file that is, or sits under, a symbolic link, so a dist tag cannot pull local files into the bundle
-- `gasdev bundle` replaces a `.gasdev-bundle.json` committed in a library's dist tag instead of writing the cache metadata through it, so a symbolic link of that name cannot overwrite a local file
+- `gasdev bundle` replaces a `.gasdev-bundle.json` committed in a library's dist tag instead of writing the cache metadata through it, so a symbolic link of that name cannot overwrite a local file; see ADR 0025, which also records two accepted risks from symbolic links in dist tags
 
 ### Removed
 
