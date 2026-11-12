@@ -1,4 +1,4 @@
-# 24. Localhost dev server for HtmlService pages
+# 26. Localhost dev server for HtmlService pages
 
 - Status: Accepted
 - Date: 2026-11-12

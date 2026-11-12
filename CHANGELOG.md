@@ -4,9 +4,13 @@
 
 ## [Unreleased]
 
+---
+
+## [3.0.0] - 2026-11-12
+
 ### Added
 
-- `gasdev dev` live-reload server for HtmlService pages (`--port`, default 5173); `data-dev-only` elements are kept; see ADR 0024
+- `gasdev dev` live-reload server for HtmlService pages (`--port`, default 5173); `data-dev-only` elements are kept; see ADR 0026
 - `gasdev bundle`, `gasdev release`, `gasdev setup` and `gasdev deploy` subcommands, folding in gas-dev-bundle, gas-dev-release and gas-dev-ci; the `gasdev/bundle` and `gasdev/ci` exports; and a reusable `gas-deploy` workflow; see ADRs 0010-0019
 - Legacy `gasDevConfig`, `gasDevBundle`, `gasDevRelease` and `gasDevCi` package.json keys fail with an error naming the replacement and pointing to "Migrating to 3.0"
 
