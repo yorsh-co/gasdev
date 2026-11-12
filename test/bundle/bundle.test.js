@@ -1,5 +1,11 @@
 // @ts-check
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -435,6 +441,33 @@ describe.skipIf(process.platform === 'win32')('symbolic links', () => {
     ).toThrow(
       `gas-a: ${path} resolves through a symbolic link in the dist tag.`,
     );
+  });
+
+  it('replaces a linked cache metadata file without writing through it', () => {
+    const sandbox = createSandbox();
+    const target = join(sandbox, 'outside', 'target.json');
+    writeFiles(join(sandbox, 'outside'), { 'target.json': 'untouched\n' });
+    const repo = createLibrary(sandbox, 'gas-a', [
+      {
+        version: '1.0.0',
+        files: { 'gas-a.js': 'var a = 1;\n' },
+        symlinks: { '.gasdev-bundle.json': target },
+      },
+    ]);
+    const options = project(sandbox);
+    const { result } = run({
+      libraries: { 'gas-a': { version: '*', repository: repo } },
+      ...options,
+    });
+    expect(result.code).toContain('var a = 1;');
+    expect(readFileSync(target, 'utf8')).toBe('untouched\n');
+    const metadata = join(options.cacheDir, 'gas-a@1.0.0/.gasdev-bundle.json');
+    expect(lstatSync(metadata).isFile()).toBe(true);
+    expect(JSON.parse(readFileSync(metadata, 'utf8'))).toMatchObject({
+      name: 'gas-a',
+      version: '1.0.0',
+      repository: repo,
+    });
   });
 
   it('ignores links to files the bundle does not read', () => {
