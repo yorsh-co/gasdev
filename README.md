@@ -28,6 +28,7 @@
   - [Apps Script tests](#apps-script-tests)
 - [Building](#building)
   - [HTML build](#html-build)
+    - [Local development](#local-development)
   - [Bundle](#bundle)
   - [Peer types](#peer-types)
 - [Releasing](#releasing)
@@ -60,6 +61,7 @@
 - [`gasdev/test`](#test-loader) loads Apps Script sources into a fresh `node:vm` context for Vitest
 - [`gasdev gas-test`](#apps-script-tests) runs a library's tests in real Apps Script
 - [`gasdev html`](#html-build) inlines an HTML page into one generated `.ts` string constant
+- [`gasdev dev`](#local-development) serves HtmlService pages on localhost and reloads the browser on change
 - [`gasdev peers sync`](#peer-types) writes peer libraries' type declarations from their tagged releases
 - [`gasdev bundle`](#bundle) bundles gas-\* libraries from their `dist/vX.Y.Z` tags into one global script
 - [`gasdev release`](#release) publishes a library build to dist branches with tags in one atomic push
@@ -737,6 +739,50 @@ gasdev html [--check]
 1. Make `build:frontend` run `gasdev html` after the frontend compile, for example `tsc -p tsconfig.frontend.json && gasdev html`.
 2. Commit the generated file: tests, Apps Script tests and type-checking load it from `loadOrder`.
 3. `npm run check` fails with drift when it is stale, because `gasdev check` is part of it. No script of the project is required by this feature.
+
+#### Local development
+
+```
+gasdev dev [--port <n>]
+```
+
+`gasdev dev` serves every `gasdev.html` entry on `http://127.0.0.1:<port>` (default `5173`) and prints the URL. With one entry, `/` is the page; with several, `/` is an index linking `/<entry>` for each. It binds to `127.0.0.1` only and has no host option. `--port` is valid only with `dev` and must be an integer from 1 to 65535.
+
+The page is the same inlined document `gasdev html` builds, rebuilt on every request. `dev` writes no `out` file: `gasdev html` remains the only writer.
+
+- **Reload:** changing any file under the directory of an entry (recursively) reloads the open tab after a short debounce. A reload is a full page reload, not hot module replacement.
+- **TypeScript:** a `.ts` source is transpiled on each request, but not type-checked or compiled to `.js` on disk. Run `tsc --watch` for type errors.
+- **Build errors:** a failed build, such as a missing `<script src>` file, is shown in the tab instead of stopping the server. Fixing the file reloads the tab.
+- **Dev-only elements:** unlike the production build, elements with `data-dev-only` are kept, so the page can run without Apps Script. Use one to mock `google.script.run`:
+
+```html
+<script data-dev-only src="mock-server.js"></script>
+```
+
+```js
+// mock-server.js
+if (!window.google) {
+  window.google = {
+    script: {
+      run: {
+        withSuccessHandler(onSuccess) {
+          return {
+            getConfig() {
+              onSuccess({ name: 'demo' });
+            },
+          };
+        },
+      },
+    },
+  };
+}
+```
+
+Limits:
+
+- Server-side code does not run: Apps Script services such as `SpreadsheetApp` have no local equivalent, so `google.script.run` must be mocked.
+- Only HtmlService pages are served.
+- When an entry sits at the project root, the watch also covers `node_modules` and `.git`.
 
 ### Bundle
 

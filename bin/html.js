@@ -244,15 +244,17 @@ function wrap(open, close, code, file) {
 
 /**
  * Inlines the local stylesheets and scripts of an HTML page and removes the
- * elements marked `data-dev-only`. Tags inside comments, scripts and styles
- * are left alone.
+ * elements marked `data-dev-only`, unless `dev` is set. Tags inside comments,
+ * scripts and styles are left alone.
  *
  * @param {string} cwd Project root.
  * @param {string} entry Project-relative POSIX path of the HTML file.
+ * @param {{ dev?: boolean }} [options] With `dev`, `data-dev-only` elements are
+ *   kept and processed like any other.
  * @returns {string} The inlined page.
  * @throws {HtmlError} When a referenced file is missing or cannot be inlined.
  */
-export function inlinePage(cwd, entry) {
+export function inlinePage(cwd, entry, { dev = false } = {}) {
   const html = readSource(cwd, entry, entry);
   let out = '';
   let i = 0;
@@ -277,7 +279,7 @@ export function inlinePage(cwd, entry) {
     }
     const tag = parseStartTag(html, start);
     const { name, attributes } = tag;
-    const devOnly = attributes.some((a) => a.name === 'data-dev-only');
+    const devOnly = !dev && attributes.some((a) => a.name === 'data-dev-only');
     // Raw-text elements are always skipped as a unit; other elements only
     // when they are removed together with their content.
     const hasContent =

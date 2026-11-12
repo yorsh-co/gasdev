@@ -12,6 +12,7 @@ import {
   initProject,
   loadConfig,
 } from './check.js';
+import { DevError, runDev } from './dev.js';
 import { GasTestError, runBuild, runRun } from './gas-test.js';
 import { GithubError, runGithub } from './github.js';
 import { HtmlError, runHtml } from './html.js';
@@ -24,6 +25,7 @@ const OPTIONS = /** @type {const} */ ({
   keep: { type: 'boolean' },
   check: { type: 'boolean' },
   fix: { type: 'boolean' },
+  port: { type: 'string' },
 });
 
 const USAGE = `Usage: gasdev check [--fix]
@@ -32,6 +34,7 @@ const USAGE = `Usage: gasdev check [--fix]
        gasdev gas-test build [--out <file>]
        gasdev gas-test run [--keep]
        gasdev html [--check]
+       gasdev dev [--port <n>]
        gasdev bundle
        gasdev release [--dry-run] [--target <branch>]...
        gasdev setup
@@ -63,6 +66,9 @@ Commands:
   html             Inline each "html" entry's local stylesheets and scripts
                    (TypeScript is transpiled) into a generated .ts file that
                    declares the page as a string constant
+  dev              Serve each "html" entry on 127.0.0.1 with the same inlining as
+                   html (data-dev-only elements kept) and reload the page when a
+                   file in the entry's directory changes
   bundle           Bundle gas-* libraries from their dist tags into one global
                    script file (see "gasdev.bundle"; run bundle --help)
   release          Publish the build of a gas-* library to its dist branch(es)
@@ -84,6 +90,7 @@ Options:
   --keep           gas-test run: keep the temporary project directory
   --check          html, peers sync: write nothing; exit 1 when a generated
                    file is stale
+  --port <n>       dev: port to listen on (default: 5173)
   --fix            check: write what init writes, then report what is left
                    github: create or update the rulesets
 `;
@@ -144,6 +151,7 @@ export async function main(argv) {
   const isInit = command === 'init' && rest.length === 0;
   const isGithub = command === 'github' && rest.length === 0;
   const isHtml = command === 'html' && rest.length === 0;
+  const isDev = command === 'dev' && rest.length === 0;
   const isPeers = command === 'peers' && rest.join(' ') === 'sync';
   if (
     !isCheck &&
@@ -152,6 +160,7 @@ export async function main(argv) {
     !isBuild &&
     !isRun &&
     !isHtml &&
+    !isDev &&
     !isPeers
   ) {
     return usageError(`unknown command: ${positionals.join(' ')}.`);
@@ -165,6 +174,14 @@ export async function main(argv) {
   if (values.check && !isHtml && !isPeers) {
     return usageError('--check is only valid with html or peers sync.');
   }
+  let port = 5173;
+  if (values.port !== undefined) {
+    if (!isDev) return usageError('--port is only valid with dev.');
+    port = Number(values.port);
+    if (!/^\d+$/.test(values.port) || port < 1 || port > 65535) {
+      return usageError('--port must be an integer from 1 to 65535.');
+    }
+  }
   if (values.fix && !isCheck && !isGithub) {
     return usageError('--fix is only valid with check or github.');
   }
@@ -173,6 +190,10 @@ export async function main(argv) {
     if (isHtml) {
       const { html } = loadConfig(process.cwd());
       return runHtml(process.cwd(), html, { check: values.check === true });
+    }
+    if (isDev) {
+      const { html } = loadConfig(process.cwd());
+      return await runDev(process.cwd(), html, { port });
     }
     if (isPeers) {
       const { peers } = loadConfig(process.cwd());
@@ -194,6 +215,7 @@ export async function main(argv) {
   } catch (error) {
     if (
       error instanceof CheckError ||
+      error instanceof DevError ||
       error instanceof GasTestError ||
       error instanceof GithubError ||
       error instanceof HtmlError ||
