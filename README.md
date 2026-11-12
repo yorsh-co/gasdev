@@ -1166,7 +1166,7 @@ Enable the [Apps Script API](https://script.google.com/home/usersettings) for th
 
 #### 2. Commit the clasp and manifest templates
 
-Commit `.clasp.example.json` and `appsscript.example.json` at the project root; the [setup wizard](#wizard-configuration) requires both. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
+Commit `.clasp.example.json` and `appsscript.example.json` at the project root. If either is missing, `gasdev setup` offers to create it with defaults (`{ "rootDir": "dist" }` and a V8 manifest with `STACKDRIVER` exception logging and empty `oauthScopes`, without a `webapp` block); review the files (`rootDir`, `oauthScopes`, the `webapp` block) and commit them. `gasdev deploy` still requires both and never creates them. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
 
 ```json
 { "rootDir": "dist" }
