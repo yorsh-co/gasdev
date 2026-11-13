@@ -56,7 +56,7 @@
 - One shared [Prettier config](#prettier), five [TypeScript presets](#typescript) and one [ESLint factory](#eslint), rolled out by a version bump
 - Prettier, TypeScript and ESLint configs are shared through their own extension mechanisms instead of copied files, see [Shared configs](#shared-configs)
 - [ESLint](#eslint) `gas` preset for Apps Script TypeScript, with a `web` option and a `node` preset for plain JavaScript
-- [`gasdev check`](#config-check) reports drift in ignore files, Dependabot config and standard scripts
+- [`gasdev check`](#config-check) reports drift in ignore files, Dependabot config, standard scripts and the peer declaration `@version` header
 - [`gasdev init`](#config-check) scaffolds a new project without overwriting anything
 - [`gasdev/test`](#test-loader) loads Apps Script sources into a fresh `node:vm` context for Vitest
 - [`gasdev gas-test`](#apps-script-tests) runs a library's tests in real Apps Script
@@ -328,7 +328,7 @@ gasdev check [--fix]
 gasdev init
 ```
 
-It reads the project in the current directory and writes nothing unless `--fix` is given or `init` is run. A passing run prints `✓ Config check passed`, or `✓ Config check passed with N warning(s)` after listing the warnings; otherwise the drift is listed per file on stderr, followed by `✗ Config check failed: N issue(s) in M file(s)`. Only issues count toward the exit code; warnings do not.
+It also fails when `peer/<name>.peer.types.d.ts` exists and its `@version` header is missing or differs from `package.json`'s `version`; `--fix` cannot fix it. It reads the project in the current directory and writes nothing unless `--fix` is given or `init` is run. A passing run prints `✓ Config check passed`, or `✓ Config check passed with N warning(s)` after listing the warnings; otherwise the drift is listed per file on stderr, followed by `✗ Config check failed: N issue(s) in M file(s)`. Only issues count toward the exit code; warnings do not.
 
 `check --fix` and `init` write the same fixes. `init` is the name to use when scaffolding a new project; after upgrading `gasdev`, run `npx gasdev check --fix` to pick up new template lines and scripts.
 
@@ -996,7 +996,7 @@ Run it from the released commit, after `git flow release finish` and the build:
    - every `files` and `include` source exists
    - `<branch>/vX.Y.Z` exists neither locally nor on the remote
 
-   With `githubRelease` on, it also requires a GitHub remote, `vX.Y.Z` on the remote at the same commit, a working authenticated `gh` and the rulesets described under [GitHub Release](#github-release). Bump the `@version` header in the git-flow release branch together with the version, because the check runs on the tagged commit.
+   With `githubRelease` on, it also requires a GitHub remote, `vX.Y.Z` on the remote at the same commit, a working authenticated `gh` and the rulesets described under [GitHub Release](#github-release). Bump the `@version` header in the git-flow release branch together with the version, because the check runs on the tagged commit. `npm run check` reports the same mismatch earlier, on the release branch. See [ADR 0027](docs/adr/0027-peer-version-in-check.md).
 
 2. **Sync**: for each target, fetches `<remote>/<branch>` if it exists and prepares a worktree at `.worktrees/<branch>` (reusing it, checking out the local branch, tracking the remote branch, or creating an orphan branch for a first release). The local branch is fast-forwarded to the remote; if it has commits the remote lacks, the release is refused.
 3. **Stage**: clears the worktree, copies the build minus `exclude` and `hide`, the `include` trees, the `files` and the generated `package.json`, then runs `git add -A`.

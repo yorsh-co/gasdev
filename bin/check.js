@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { legacyKeyMessage } from '../src/legacy-keys.js';
+import { readPeerTypesVersion } from '../src/release/peer-types.js';
 import { HtmlError, compareModule } from './html.js';
 
 const PRESETS = ['gas', 'node'];
@@ -662,6 +663,36 @@ function checkHtml(cwd, html, loadOrder) {
 }
 
 /**
+ * Compares the `@version` header of the package's peer declarations with its `version`.
+ *
+ * @param {string} cwd Project root.
+ * @param {Record<string, unknown>} pkg The project's package.json.
+ * @returns {Drift[]}
+ */
+function checkPeerTypesVersion(cwd, pkg) {
+  const peer = readPeerTypesVersion(pkg, cwd);
+  if (!peer) return [];
+  const { file, declared } = peer;
+  if (declared === undefined) {
+    return [
+      {
+        file,
+        message: `has no @version tag; expected: @version ${pkg.version}`,
+      },
+    ];
+  }
+  if (declared !== pkg.version) {
+    return [
+      {
+        file,
+        message: `@version ${declared} differs from package.json version ${pkg.version}`,
+      },
+    ];
+  }
+  return [];
+}
+
+/**
  * Reads package.json from a project.
  *
  * @param {string} cwd Project root.
@@ -701,6 +732,7 @@ export function checkProject(cwd) {
     ...checkIgnoreFile(cwd, preset, '.prettierignore'),
     ...checkDependabot(cwd, preset),
     ...checkScripts(pkg, preset, gasTest),
+    ...checkPeerTypesVersion(cwd, pkg),
     ...(loadOrder ? checkLoadOrder(cwd, loadOrder) : []),
     ...(loadOrder && html ? checkHtml(cwd, html, loadOrder) : []),
   ];

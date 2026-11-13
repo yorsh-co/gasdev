@@ -1024,3 +1024,60 @@ describe('CLI usage', () => {
     expect(result.stdout).toBe(`${version}\n`);
   });
 });
+
+describe('check (peer declaration version)', () => {
+  const FILE = 'peer/gas-lib.peer.types.d.ts';
+
+  /**
+   * @param {string | undefined} header File content, or `undefined` for no file.
+   * @param {Record<string, unknown>} [pkgExtra]
+   */
+  const make = (header, pkgExtra = { name: 'gas-lib', version: '1.2.0' }) => {
+    const dir = createCleanProject('gas', pkgExtra);
+    if (header !== undefined) {
+      mkdirSync(join(dir, 'peer'));
+      writeFileSync(join(dir, FILE), header);
+    }
+    return dir;
+  };
+  const header = (/** @type {string} */ v) =>
+    `/**\n * @version ${v}\n */\nexport {};\n`;
+
+  it('passes when the header matches package.json', () => {
+    expect(run(make(header('1.2.0')), ['check']).status).toBe(0);
+  });
+
+  it('fails when the header differs', () => {
+    const result = run(make(header('1.1.0')), ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(FILE);
+    expect(result.stderr).toContain(
+      '@version 1.1.0 differs from package.json version 1.2.0',
+    );
+  });
+
+  it('fails when the header has no @version tag', () => {
+    const result = run(make('export {};\n'), ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(FILE);
+    expect(result.stderr).toContain(
+      'has no @version tag; expected: @version 1.2.0',
+    );
+  });
+
+  it('passes when the file is absent', () => {
+    expect(run(make(undefined), ['check']).status).toBe(0);
+  });
+
+  it('passes when the package has no name', () => {
+    const dir = make(header('0.0.1'), { version: '1.2.0', name: undefined });
+    expect(run(dir, ['check']).status).toBe(0);
+  });
+
+  it('is not fixed by --fix', () => {
+    const dir = make(header('1.1.0'));
+    const result = run(dir, ['check', '--fix']);
+    expect(result.status).toBe(1);
+    expect(readFileSync(join(dir, FILE), 'utf8')).toBe(header('1.1.0'));
+  });
+});
