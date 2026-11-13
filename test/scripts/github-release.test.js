@@ -74,13 +74,18 @@ describe('github-release script', () => {
     const { code, calls } = run('v1.0.0', { gh: { view: 'draft' } });
     expect(code).toBe(1);
     expect(calls.some((call) => call.args[1] === 'create')).toBe(false);
-    expect(err).toHaveBeenCalledWith(expect.stringContaining('draft'));
+    expect(err).toHaveBeenCalledWith(
+      '✗ A draft GitHub Release for v1.0.0 exists; publish or delete it by hand',
+    );
   });
 
   it('rejects a prerelease tag without calling gh', () => {
     const { code, calls } = run('v1.0.0-beta.1');
     expect(code).toBe(1);
     expect(calls).toEqual([]);
+    expect(err).toHaveBeenCalledWith(
+      '✗ v1.0.0-beta.1 is not a stable vX.Y.Z tag',
+    );
   });
 
   it('rejects a tag that differs from package.json version', () => {
@@ -98,6 +103,7 @@ describe('github-release script', () => {
     });
     expect(code).toBe(1);
     expect(calls).toEqual([]);
+    expect(err).toHaveBeenCalledWith('✗ CHANGELOG.md has no section for 1.0.0');
   });
 
   it('fails when GITHUB_REPOSITORY is not set', () => {
@@ -106,6 +112,16 @@ describe('github-release script', () => {
     });
     expect(code).toBe(1);
     expect(calls).toEqual([]);
+    expect(err).toHaveBeenCalledWith('✗ GITHUB_REPOSITORY is not set');
+  });
+
+  it('prints usage when no tag is given', () => {
+    const { code, calls } = run('');
+    expect(code).toBe(1);
+    expect(calls).toEqual([]);
+    expect(err).toHaveBeenCalledWith(
+      '✗ Usage: node scripts/github-release.js <tag>',
+    );
   });
 
   it("fails with gh's stderr when create fails", () => {

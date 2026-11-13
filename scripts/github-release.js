@@ -29,7 +29,9 @@ export function main(argv, { cwd, env }) {
   const repo = env['GITHUB_REPOSITORY'];
   if (!repo) return fail('GITHUB_REPOSITORY is not set');
 
-  const tag = argv[0] ?? '';
+  const tag = argv[0];
+  if (!tag) return fail('Usage: node scripts/github-release.js <tag>');
+
   const version = STABLE_TAG.exec(tag)?.[1];
   if (!version) return fail(`${tag} is not a stable vX.Y.Z tag`);
 
