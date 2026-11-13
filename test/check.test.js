@@ -15,6 +15,9 @@ import { REPO_ROOT } from './support.js';
 
 const BIN = join(REPO_ROOT, 'bin', 'gasdev.js');
 const TEMPLATES = join(REPO_ROOT, 'templates');
+const GASDEV_NODE = JSON.parse(
+  readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
+).engines.node;
 
 /** @type {string[]} */
 const dirs = [];
@@ -47,7 +50,15 @@ function createCleanProject(preset, pkgExtra = {}) {
   const configured = /** @type {any} */ (pkgExtra.gasdev)?.gasTest;
   const scripts = { ...required, ...(configured && gasTest) };
   for (const name of present) scripts[name] = 'true';
-  writePackage(dir, { name: 'consumer', scripts, ...pkgExtra });
+  const { type, prettier } = JSON.parse(read('package.json'));
+  writePackage(dir, {
+    name: 'consumer',
+    type,
+    prettier,
+    engines: { node: GASDEV_NODE },
+    scripts,
+    ...pkgExtra,
+  });
   return dir;
 }
 
@@ -346,6 +357,53 @@ describe.each(['gas', 'node'])('check (%s preset)', (preset) => {
     });
   });
 });
+
+describe.each(['gas', 'node'])(
+  'check (package fields, %s preset)',
+  (preset) => {
+    const make = (/** @type {Record<string, unknown>} */ extra = {}) =>
+      createCleanProject(/** @type {'gas' | 'node'} */ (preset), {
+        ...(preset === 'node' && { gasdev: { preset } }),
+        ...extra,
+      });
+    const drift = (/** @type {string} */ dir) => run(dir, ['check']).stderr;
+
+    it.each(['type', 'prettier'])('reports a missing %s', (key) => {
+      const dir = make({ [key]: undefined });
+      expect(drift(dir)).toContain(`${key} is missing`);
+    });
+
+    it.each([
+      ['type', 'commonjs'],
+      ['prettier', { semi: false }],
+    ])('reports a differing %s', (key, value) => {
+      const dir = make({ [key]: value });
+      expect(drift(dir)).toContain(`${key} differs`);
+    });
+
+    it('reports a missing engines.node', () => {
+      const dir = make({ engines: undefined });
+      expect(drift(dir)).toContain('engines.node is missing');
+    });
+
+    it('accepts a subset of the gasdev range', () => {
+      const dir = make({ engines: { node: '^24.0.0' } });
+      expect(run(dir, ['check']).status).toBe(0);
+    });
+
+    it.each(['>=20', 'not a range'])('reports engines.node %s', (node) => {
+      const dir = make({ engines: { node } });
+      expect(drift(dir)).toContain(
+        `engines.node "${node}" is not within gasdev's`,
+      );
+    });
+
+    it('exempts gasdev itself from prettier', () => {
+      const dir = make({ name: 'gasdev', prettier: undefined });
+      expect(drift(dir)).not.toContain('prettier');
+    });
+  },
+);
 
 describe('check (placeholder scripts)', () => {
   const PRESENT = ['build', 'build:watch', 'typecheck'];
@@ -845,6 +903,15 @@ describe('init', () => {
         ...Object.keys(required),
         ...present,
       ]);
+      expect(pkg.type).toBe('module');
+      expect(pkg.prettier).toBe('gasdev/prettier');
+      expect(pkg.engines).toEqual({ node: GASDEV_NODE });
+      expect(Object.keys(pkg).slice(-4)).toEqual([
+        'scripts',
+        'type',
+        'prettier',
+        'engines',
+      ]);
       for (const name of Object.keys(required)) {
         expect(result.stdout).toContain(`package.json: added scripts.${name}`);
       }
@@ -913,6 +980,38 @@ describe('init', () => {
       expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(
         before.replace(/\n$/, ''),
       );
+    });
+
+    it('keeps existing fields and other engines keys', () => {
+      const dir = createEmptyProject(p, {
+        type: 'commonjs',
+        prettier: { semi: false },
+        engines: { npm: '>=10' },
+      });
+      run(dir, ['init']);
+      const pkg = readPackage(dir);
+      expect(pkg.type).toBe('commonjs');
+      expect(pkg.prettier).toEqual({ semi: false });
+      expect(pkg.engines).toEqual({ npm: '>=10', node: GASDEV_NODE });
+    });
+
+    it('keeps an existing engines.node', () => {
+      const dir = createEmptyProject(p, { engines: { node: '^24.0.0' } });
+      const result = run(dir, ['init']);
+      expect(readPackage(dir).engines).toEqual({ node: '^24.0.0' });
+      expect(result.stdout).not.toContain('engines.node');
+    });
+
+    it('writes nothing when engines is invalid', () => {
+      const dir = createEmptyProject(p, { engines: '>=22' });
+      const before = readFileSync(join(dir, 'package.json'), 'utf8');
+      const result = run(dir, ['init']);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'package.json: engines must be an object',
+      );
+      expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before);
+      expect(existsSync(join(dir, '.gitignore'))).toBe(false);
     });
 
     it('writes nothing when the config is invalid', () => {

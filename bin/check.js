@@ -1,6 +1,7 @@
 // @ts-check
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import semver from 'semver';
 import { legacyKeyMessage } from '../src/legacy-keys.js';
 import { readPeerTypesVersion } from '../src/release/peer-types.js';
 import { HtmlError, compareModule } from './html.js';
@@ -70,6 +71,7 @@ const RESERVED_WORDS = new Set([
 const SCOPE_PREFIX = 'https://www.googleapis.com/auth/';
 const PEER_NAME = /^[a-z0-9][a-z0-9._-]*$/;
 const TEMPLATES = new URL('../templates/', import.meta.url);
+const GASDEV_PACKAGE = new URL('../package.json', import.meta.url);
 
 /** Local invocation used in place of the `gasdev` bin by this package itself. */
 const SELF_BIN = 'node bin/gasdev.js';
@@ -604,6 +606,85 @@ function checkScripts(pkg, preset, gasTest) {
 }
 
 /**
+ * Reads gasdev's own `engines.node` range, the source of truth for projects.
+ *
+ * @returns {string}
+ */
+function gasdevNodeRange() {
+  const pkg = readJson(GASDEV_PACKAGE, 'gasdev package.json');
+  const engines = isRecord(pkg) ? pkg['engines'] : undefined;
+  const range = isRecord(engines) ? engines['node'] : undefined;
+  if (typeof range !== 'string') {
+    throw new CheckError('gasdev package.json: engines.node is missing');
+  }
+  return range;
+}
+
+/**
+ * Reads a preset's `package.json` template.
+ *
+ * @param {string} preset
+ * @returns {Record<string, unknown>}
+ */
+function readPackageTemplate(preset) {
+  const template = readJson(
+    new URL(`${preset}/package.json`, TEMPLATES),
+    'package.json template',
+  );
+  return isRecord(template) ? template : {};
+}
+
+/**
+ * Requires `type`, `prettier` and `engines.node` to match gasdev's conventions.
+ *
+ * @param {Record<string, unknown>} pkg Parsed package.json.
+ * @param {string} preset
+ * @returns {Drift[]}
+ */
+function checkPackageFields(pkg, preset) {
+  const file = 'package.json';
+  const template = readPackageTemplate(preset);
+  /** @type {Drift[]} */
+  const drift = [];
+  /** @type {[string, unknown][]} */
+  const fields = [['type', template['type']]];
+  if (pkg['name'] !== 'gasdev') fields.push(['prettier', template['prettier']]);
+  for (const [key, wanted] of fields) {
+    const found = pkg[key];
+    if (found === undefined) {
+      drift.push({
+        file,
+        message: `${key} is missing; expected: ${JSON.stringify(wanted)}`,
+      });
+    } else if (found !== wanted) {
+      drift.push({
+        file,
+        message: `${key} differs; expected: ${JSON.stringify(wanted)}; found: ${JSON.stringify(found)}`,
+      });
+    }
+  }
+  const range = gasdevNodeRange();
+  const engines = isRecord(pkg['engines']) ? pkg['engines'] : {};
+  const found = engines['node'];
+  if (found === undefined) {
+    drift.push({
+      file,
+      message: `engines.node is missing; expected: ${JSON.stringify(range)}`,
+    });
+  } else if (
+    typeof found !== 'string' ||
+    semver.validRange(found) === null ||
+    !semver.subset(found, range)
+  ) {
+    drift.push({
+      file,
+      message: `engines.node ${JSON.stringify(found)} is not within gasdev's ${JSON.stringify(range)}`,
+    });
+  }
+  return drift;
+}
+
+/**
  * Requires every `loadOrder` entry to exist under `src/`.
  *
  * @param {string} cwd
@@ -734,6 +815,7 @@ export function checkProject(cwd) {
     ...checkIgnoreFile(cwd, preset, '.prettierignore'),
     ...checkDependabot(cwd, preset),
     ...checkScripts(pkg, preset, gasTest),
+    ...checkPackageFields(pkg, preset),
     ...checkPeerTypesVersion(cwd, pkg),
     ...(loadOrder ? checkLoadOrder(cwd, loadOrder) : []),
     ...(loadOrder && html ? checkHtml(cwd, html, loadOrder) : []),
@@ -760,15 +842,14 @@ function createDependabot(cwd, preset) {
 /**
  * Adds the required scripts missing from package.json, then a placeholder for
  * each missing script that must only be present, after the existing ones.
- * Existing scripts are never changed.
+ * Existing scripts are never changed. Mutates `pkg`; the caller writes it.
  *
- * @param {string} cwd
  * @param {Record<string, unknown>} pkg Parsed package.json.
  * @param {string} preset
  * @param {GasTestConfig | undefined} gasTest Configured `gasTest` settings, if any.
  * @returns {string[]} One message per added script.
  */
-function addScripts(cwd, pkg, preset, gasTest) {
+function addScripts(pkg, preset, gasTest) {
   const template = /** @type {ScriptsTemplate} */ (
     readJson(new URL(`${preset}/scripts.json`, TEMPLATES), 'scripts template')
   );
@@ -786,7 +867,6 @@ function addScripts(cwd, pkg, preset, gasTest) {
     ...Object.fromEntries(missing),
     ...Object.fromEntries(placeholders),
   };
-  writeFileSync(join(cwd, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
   return [
     ...missing.map(([name]) => `package.json: added scripts.${name}`),
     ...placeholders.map(
@@ -797,11 +877,38 @@ function addScripts(cwd, pkg, preset, gasTest) {
 }
 
 /**
+ * Adds the `type`, `prettier` and `engines.node` fields missing from package.json.
+ * Existing values are never changed. Mutates `pkg`; the caller writes it.
+ *
+ * @param {Record<string, unknown>} pkg Parsed package.json.
+ * @param {string} preset
+ * @returns {string[]} One message per added field.
+ */
+function addPackageFields(pkg, preset) {
+  const template = readPackageTemplate(preset);
+  /** @type {string[]} */
+  const messages = [];
+  const keys = pkg['name'] === 'gasdev' ? ['type'] : ['type', 'prettier'];
+  for (const key of keys) {
+    if (pkg[key] !== undefined) continue;
+    pkg[key] = template[key];
+    messages.push(`package.json: added ${key}`);
+  }
+  const engines = isRecord(pkg['engines']) ? pkg['engines'] : {};
+  if (engines['node'] === undefined) {
+    pkg['engines'] = { ...engines, node: gasdevNodeRange() };
+    messages.push('package.json: added engines.node');
+  }
+  return messages;
+}
+
+/**
  * Scaffolds or repairs a project, for `init` and `check --fix`: applies the
  * ignore-file fixes, creates `.github/dependabot.yml` when absent, adds the
  * missing required scripts and adds placeholders for missing present-only ones.
  * Existing files and scripts are never overwritten. The configuration is
- * validated first, as is `scripts`, so an invalid one writes nothing.
+ * validated first, as are `scripts` and `engines`, so an invalid one writes
+ * nothing. package.json is written once, and only when it changed.
  *
  * @param {string} cwd Project root.
  * @returns {string[]} One message per change.
@@ -813,12 +920,25 @@ export function initProject(cwd) {
   if (pkg['scripts'] !== undefined && !isRecord(pkg['scripts'])) {
     throw new CheckError('package.json: scripts must be an object');
   }
-  return [
+  if (pkg['engines'] !== undefined && !isRecord(pkg['engines'])) {
+    throw new CheckError('package.json: engines must be an object');
+  }
+  const files = [
     ...fixIgnoreFile(cwd, preset, '.gitignore'),
     ...fixIgnoreFile(cwd, preset, '.prettierignore'),
     ...createDependabot(cwd, preset),
-    ...addScripts(cwd, pkg, preset, gasTest),
   ];
+  const pkgMessages = [
+    ...addScripts(pkg, preset, gasTest),
+    ...addPackageFields(pkg, preset),
+  ];
+  if (pkgMessages.length > 0) {
+    writeFileSync(
+      join(cwd, 'package.json'),
+      JSON.stringify(pkg, null, 2) + '\n',
+    );
+  }
+  return [...files, ...pkgMessages];
 }
 
 /**

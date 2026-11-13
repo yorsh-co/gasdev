@@ -1,0 +1,6 @@
+{
+  "type": "module",
+  "prettier": "gasdev/prettier",
+  "overrides": {},
+  "claspOverrides": {}
+}
