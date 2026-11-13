@@ -20,6 +20,7 @@
   "include": [
     "bin/**/*.js",
     "eslint/**/*.js",
+    "scripts/**/*.js",
     "src/**/*.js",
     "test-loader/**/*.js",
     "test/**/*.js"
