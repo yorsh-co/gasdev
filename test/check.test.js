@@ -1069,9 +1069,11 @@ describe('check (peer declaration version)', () => {
     expect(run(make(undefined), ['check']).status).toBe(0);
   });
 
-  it('passes when the package has no name', () => {
-    const dir = make(header('0.0.1'), { version: '1.2.0', name: undefined });
-    expect(run(dir, ['check']).status).toBe(0);
+  it('reports no peer drift when the package has no version', () => {
+    const dir = make(header('0.0.1'), { name: 'gas-lib' });
+    const result = run(dir, ['check']);
+    expect(result.stderr).not.toContain(FILE);
+    expect(result.stderr).not.toContain('undefined');
   });
 
   it('is not fixed by --fix', () => {

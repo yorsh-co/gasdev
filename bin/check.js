@@ -664,12 +664,14 @@ function checkHtml(cwd, html, loadOrder) {
 
 /**
  * Compares the `@version` header of the package's peer declarations with its `version`.
+ * Returns no drift when `version` is not a string.
  *
  * @param {string} cwd Project root.
  * @param {Record<string, unknown>} pkg The project's package.json.
  * @returns {Drift[]}
  */
 function checkPeerTypesVersion(cwd, pkg) {
+  if (typeof pkg.version !== 'string') return [];
   const peer = readPeerTypesVersion(pkg, cwd);
   if (!peer) return [];
   const { file, declared } = peer;

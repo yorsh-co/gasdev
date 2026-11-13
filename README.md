@@ -328,7 +328,7 @@ gasdev check [--fix]
 gasdev init
 ```
 
-It also fails when `peer/<name>.peer.types.d.ts` exists and its `@version` header is missing or differs from `package.json`'s `version`; `--fix` cannot fix it. It reads the project in the current directory and writes nothing unless `--fix` is given or `init` is run. A passing run prints `✓ Config check passed`, or `✓ Config check passed with N warning(s)` after listing the warnings; otherwise the drift is listed per file on stderr, followed by `✗ Config check failed: N issue(s) in M file(s)`. Only issues count toward the exit code; warnings do not.
+It reads the project in the current directory and writes nothing unless `--fix` is given or `init` is run. It also fails when `peer/<name>.peer.types.d.ts` exists and its `@version` header is missing or differs from `package.json`'s `version`; `--fix` cannot fix it. A passing run prints `✓ Config check passed`, or `✓ Config check passed with N warning(s)` after listing the warnings; otherwise the drift is listed per file on stderr, followed by `✗ Config check failed: N issue(s) in M file(s)`. Only issues count toward the exit code; warnings do not.
 
 `check --fix` and `init` write the same fixes. `init` is the name to use when scaffolding a new project; after upgrading `gasdev`, run `npx gasdev check --fix` to pick up new template lines and scripts.
 
