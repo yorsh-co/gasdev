@@ -1559,6 +1559,7 @@ Run `npm run check` before opening a pull request. It runs the format check, lin
 - `npm run test:network` runs the network tests (`GASDEV_NETWORK=1`).
 - `npm run lint:workflows` validates the workflows and needs `action-validator`.
 - Decisions are recorded in `docs/adr/`.
+- Pushing a `vX.Y.Z` tag creates the GitHub Release from the matching `CHANGELOG.md` section through `.github/workflows/release.yml`. Prerelease tags are skipped, and the tag must match `package.json` `version` ([ADR 0028](docs/adr/0028-github-release-workflow.md)).
 - Commits follow Conventional Commits.
 - Update `CHANGELOG.md` with every user-facing change.
 
