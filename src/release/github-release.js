@@ -65,6 +65,36 @@ function escapeRegExp(text) {
 }
 
 /**
+ * Extracts the CHANGELOG section for a version, without its heading, trailing
+ * link definitions or trailing rule.
+ *
+ * @param {string} cwd Project root.
+ * @param {string} version Version without the `v` prefix.
+ * @returns {string} The section, or `''` when the file or section is missing or empty.
+ */
+export function changelogSection(cwd, version) {
+  let changelog;
+  try {
+    changelog = readFileSync(join(cwd, 'CHANGELOG.md'), 'utf8');
+  } catch {
+    return '';
+  }
+  const lines = changelog.split(/\r?\n/);
+  const heading = new RegExp(`^## \\[v?${escapeRegExp(version)}\\]`);
+  const start = lines.findIndex((line) => heading.test(line));
+  if (start === -1) return '';
+  const end = lines.findIndex(
+    (line, index) => index > start && line.startsWith('## '),
+  );
+  return lines
+    .slice(start + 1, end === -1 ? undefined : end)
+    .join('\n')
+    .replace(/(?:\s*\n\[[^\]]+\]:\s[^\n]*)+\s*$/, '')
+    .replace(/(?:\s*\n---\s*)+$/, '')
+    .trim();
+}
+
+/**
  * Builds the release notes: the CHANGELOG section for the version, else the
  * tag annotation, else the tag name.
  *
@@ -74,27 +104,8 @@ function escapeRegExp(text) {
  */
 export function releaseNotes(cwd, version) {
   const tag = `v${version}`;
-  let changelog = '';
-  try {
-    changelog = readFileSync(join(cwd, 'CHANGELOG.md'), 'utf8');
-  } catch {
-    // No changelog; fall through to the annotation.
-  }
-  const lines = changelog.split(/\r?\n/);
-  const heading = new RegExp(`^## \\[v?${escapeRegExp(version)}\\]`);
-  const start = lines.findIndex((line) => heading.test(line));
-  if (start !== -1) {
-    const end = lines.findIndex(
-      (line, index) => index > start && line.startsWith('## '),
-    );
-    const section = lines
-      .slice(start + 1, end === -1 ? undefined : end)
-      .join('\n')
-      .replace(/(?:\s*\n\[[^\]]+\]:\s[^\n]*)+\s*$/, '')
-      .replace(/(?:\s*\n---\s*)+$/, '')
-      .trim();
-    if (section) return section;
-  }
+  const section = changelogSection(cwd, version);
+  if (section) return section;
 
   let annotation = '';
   try {

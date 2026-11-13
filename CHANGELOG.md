@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- gasdev's own GitHub Releases are created by `.github/workflows/release.yml` when a stable `vX.Y.Z` tag is pushed, using the matching CHANGELOG section as notes; see [ADR 0028](docs/adr/0028-github-release-workflow.md)
+
+### Changed
+
+- Dev-only: `npm run lint:workflows` validates every file in `.github/workflows`
+
 ---
 
 ## [3.1.0] - 2026-11-13
