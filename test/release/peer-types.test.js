@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ReleaseError } from '../../src/release/errors.js';
-import { assertPeerTypesVersion } from '../../src/release/peer-types.js';
+import {
+  assertPeerTypesVersion,
+  readPeerTypesVersion,
+} from '../../src/release/peer-types.js';
 import { writeFiles } from './helpers/project.js';
 
 /** @type {string[]} */
@@ -70,5 +73,14 @@ describe('assertPeerTypesVersion', () => {
       assertPeerTypesVersion(pkg, project('/** No tag. */\nexport {};\n'));
     expect(run).toThrow(ReleaseError);
     expect(run).toThrow(/add "@version 1\.2\.0"/);
+  });
+});
+
+describe('readPeerTypesVersion', () => {
+  it('returns undefined when the package has no name', () => {
+    const cwd = project();
+    writeFiles(cwd, { 'peer/undefined.peer.types.d.ts': header('1.2.0') });
+    const pkg = {};
+    expect(readPeerTypesVersion(pkg, cwd)).toBeUndefined();
   });
 });
