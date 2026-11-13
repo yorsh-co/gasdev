@@ -1,6 +1,6 @@
 # 11. Peer declaration version check
 
-- Status: Accepted
+- Status: Accepted; amended by ADR 0027
 - Date: 2026-11-04
 - Ported from gas-dev-release ADR 0002
 
@@ -18,7 +18,7 @@ Release preflight compares the `@version` header with `package.json`'s `version`
 
 ## Alternatives
 
-- A `gas-dev-config check` rule: suggested earlier, but it lives in a different repository and runs on a different cadence. It would flag the header during development, when it is legitimately behind the next version.
+- A `gas-dev-config check` rule: suggested earlier, but it lives in a different repository and runs on a different cadence. It would flag the header during development, when it is legitimately behind the next version. Amended by [ADR 0027](0027-peer-version-in-check.md).
 - Auto-stamping the header at release time: it would write to the tagged commit, so the tag would no longer match the released source. Rejected.
 
 ## Consequences
