@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `gasdev check` fails when the peer declaration `@version` header is missing or differs from `package.json`'s `version`; see [ADR 0027](docs/adr/0027-peer-version-in-check.md)
+
 ---
 
 ## [3.0.0] - 2026-11-12
