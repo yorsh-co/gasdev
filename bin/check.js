@@ -635,7 +635,29 @@ function readPackageTemplate(preset) {
 }
 
 /**
- * Requires `type`, `prettier` and `engines.node` to match gasdev's conventions.
+ * Lists the overrides a project is expected to carry: the template's
+ * `overrides`, plus `claspOverrides` when `@google/clasp` is a dependency.
+ *
+ * @param {Record<string, unknown>} pkg Parsed package.json.
+ * @param {string} preset
+ * @returns {Record<string, unknown>}
+ */
+function expectedOverrides(pkg, preset) {
+  const template = readPackageTemplate(preset);
+  const clasp = ['dependencies', 'devDependencies'].some(
+    (key) => isRecord(pkg[key]) && pkg[key]['@google/clasp'] !== undefined,
+  );
+  return {
+    ...(isRecord(template['overrides']) ? template['overrides'] : {}),
+    ...(clasp && isRecord(template['claspOverrides'])
+      ? template['claspOverrides']
+      : {}),
+  };
+}
+
+/**
+ * Requires `type`, `prettier`, `engines.node` and `overrides` to match gasdev's
+ * conventions. Extra overrides are ignored.
  *
  * @param {Record<string, unknown>} pkg Parsed package.json.
  * @param {string} preset
@@ -680,6 +702,25 @@ function checkPackageFields(pkg, preset) {
       file,
       message: `engines.node ${JSON.stringify(found)} is not within gasdev's ${JSON.stringify(range)}`,
     });
+  }
+  const overrides = pkg['overrides'];
+  if (overrides !== undefined && !isRecord(overrides)) {
+    drift.push({ file, message: 'overrides must be an object' });
+    return drift;
+  }
+  for (const [name, wanted] of Object.entries(expectedOverrides(pkg, preset))) {
+    const found = overrides?.[name];
+    if (found === undefined) {
+      drift.push({
+        file,
+        message: `overrides.${name} is missing; expected: ${JSON.stringify(wanted)}`,
+      });
+    } else if (found !== wanted) {
+      drift.push({
+        file,
+        message: `overrides.${name} differs; expected: ${JSON.stringify(wanted)}; found: ${JSON.stringify(found)}`,
+      });
+    }
   }
   return drift;
 }
@@ -877,7 +918,8 @@ function addScripts(pkg, preset, gasTest) {
 }
 
 /**
- * Adds the `type`, `prettier` and `engines.node` fields missing from package.json.
+ * Adds the `type`, `prettier`, `engines.node` and `overrides` entries missing
+ * from package.json.
  * Existing values are never changed. Mutates `pkg`; the caller writes it.
  *
  * @param {Record<string, unknown>} pkg Parsed package.json.
@@ -899,6 +941,18 @@ function addPackageFields(pkg, preset) {
     pkg['engines'] = { ...engines, node: gasdevNodeRange() };
     messages.push('package.json: added engines.node');
   }
+  const overrides = isRecord(pkg['overrides']) ? pkg['overrides'] : {};
+  const added = Object.entries(expectedOverrides(pkg, preset)).filter(
+    ([name]) => overrides[name] === undefined,
+  );
+  if (added.length > 0) {
+    pkg['overrides'] = { ...overrides, ...Object.fromEntries(added) };
+    for (const [name] of added) {
+      messages.push(
+        `package.json: added overrides.${name}; run npm install to apply it`,
+      );
+    }
+  }
   return messages;
 }
 
@@ -907,7 +961,7 @@ function addPackageFields(pkg, preset) {
  * ignore-file fixes, creates `.github/dependabot.yml` when absent, adds the
  * missing required scripts and adds placeholders for missing present-only ones.
  * Existing files and scripts are never overwritten. The configuration is
- * validated first, as are `scripts` and `engines`, so an invalid one writes
+ * validated first, as are `scripts`, `engines` and `overrides`, so an invalid one writes
  * nothing. package.json is written once, and only when it changed.
  *
  * @param {string} cwd Project root.
@@ -922,6 +976,9 @@ export function initProject(cwd) {
   }
   if (pkg['engines'] !== undefined && !isRecord(pkg['engines'])) {
     throw new CheckError('package.json: engines must be an object');
+  }
+  if (pkg['overrides'] !== undefined && !isRecord(pkg['overrides'])) {
+    throw new CheckError('package.json: overrides must be an object');
   }
   const files = [
     ...fixIgnoreFile(cwd, preset, '.gitignore'),

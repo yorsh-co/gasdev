@@ -50,12 +50,13 @@ function createCleanProject(preset, pkgExtra = {}) {
   const configured = /** @type {any} */ (pkgExtra.gasdev)?.gasTest;
   const scripts = { ...required, ...(configured && gasTest) };
   for (const name of present) scripts[name] = 'true';
-  const { type, prettier } = JSON.parse(read('package.json'));
+  const { type, prettier, overrides } = JSON.parse(read('package.json'));
   writePackage(dir, {
     name: 'consumer',
     type,
     prettier,
     engines: { node: GASDEV_NODE },
+    overrides,
     scripts,
     ...pkgExtra,
   });
@@ -402,8 +403,59 @@ describe.each(['gas', 'node'])(
       const dir = make({ name: 'gasdev', prettier: undefined });
       expect(drift(dir)).not.toContain('prettier');
     });
+
+    it('reports a missing override', () => {
+      const dir = make({ overrides: undefined });
+      expect(drift(dir)).toContain(
+        'overrides.minimatch is missing; expected: "^11.0.1"',
+      );
+    });
+
+    it('reports a differing override', () => {
+      const dir = make({ overrides: { minimatch: '^10.0.0' } });
+      expect(drift(dir)).toContain('overrides.minimatch differs');
+    });
+
+    it('reports overrides that is not an object', () => {
+      const dir = make({ overrides: 'x' });
+      expect(drift(dir)).toContain('overrides must be an object');
+    });
+
+    it('ignores extra overrides', () => {
+      const dir = make({ overrides: { minimatch: '^11.0.1', extra: '1.0.0' } });
+      expect(run(dir, ['check']).status).toBe(0);
+    });
+
+    it('requires the clasp overrides only with @google/clasp', () => {
+      const without = make();
+      expect(drift(without)).not.toContain('gaxios');
+      for (const key of ['dependencies', 'devDependencies']) {
+        const dir = make({ [key]: { '@google/clasp': '^3.0.0' } });
+        expect(drift(dir)).toContain('overrides.gaxios is missing');
+        writePackage(dir, {
+          ...readPackage(dir),
+          overrides: { minimatch: '^11.0.1', gaxios: '^7.3.1' },
+        });
+        expect(run(dir, ['check']).status).toBe(0);
+      }
+    });
   },
 );
+
+describe('gasdev overrides', () => {
+  it("equal the node template's merged overrides", () => {
+    const own = JSON.parse(
+      readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
+    ).overrides;
+    const template = JSON.parse(
+      readFileSync(join(TEMPLATES, 'node', 'package.json'), 'utf8'),
+    );
+    expect(own).toEqual({
+      ...template.overrides,
+      ...template.claspOverrides,
+    });
+  });
+});
 
 describe('check (placeholder scripts)', () => {
   const PRESENT = ['build', 'build:watch', 'typecheck'];
@@ -906,11 +958,12 @@ describe('init', () => {
       expect(pkg.type).toBe('module');
       expect(pkg.prettier).toBe('gasdev/prettier');
       expect(pkg.engines).toEqual({ node: GASDEV_NODE });
-      expect(Object.keys(pkg).slice(-4)).toEqual([
+      expect(Object.keys(pkg).slice(-5)).toEqual([
         'scripts',
         'type',
         'prettier',
         'engines',
+        'overrides',
       ]);
       for (const name of Object.keys(required)) {
         expect(result.stdout).toContain(`package.json: added scripts.${name}`);
@@ -1000,6 +1053,48 @@ describe('init', () => {
       const result = run(dir, ['init']);
       expect(readPackage(dir).engines).toEqual({ node: '^24.0.0' });
       expect(result.stdout).not.toContain('engines.node');
+    });
+
+    it('adds the overrides, with clasp ones only when clasp is installed', () => {
+      const plain = createEmptyProject(p);
+      const result = run(plain, ['init']);
+      expect(readPackage(plain).overrides).toEqual({ minimatch: '^11.0.1' });
+      expect(result.stdout).toContain(
+        'package.json: added overrides.minimatch; run npm install to apply it',
+      );
+      const clasp = createEmptyProject(p, {
+        devDependencies: { '@google/clasp': '^3.0.0' },
+      });
+      run(clasp, ['init']);
+      expect(readPackage(clasp).overrides).toEqual({
+        minimatch: '^11.0.1',
+        gaxios: '^7.3.1',
+      });
+    });
+
+    it('keeps a differing override and extra ones', () => {
+      const dir = createEmptyProject(p, {
+        overrides: { minimatch: '^10.0.0', extra: '1.0.0' },
+      });
+      const result = run(dir, ['init']);
+      expect(readPackage(dir).overrides).toEqual({
+        minimatch: '^10.0.0',
+        extra: '1.0.0',
+      });
+      expect(result.stdout).not.toContain('overrides');
+      expect(result.stderr).toContain('overrides.minimatch differs');
+    });
+
+    it('writes nothing when overrides is invalid', () => {
+      const dir = createEmptyProject(p, { overrides: 'x' });
+      const before = readFileSync(join(dir, 'package.json'), 'utf8');
+      const result = run(dir, ['init']);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'package.json: overrides must be an object',
+      );
+      expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before);
+      expect(existsSync(join(dir, '.gitignore'))).toBe(false);
     });
 
     it('writes nothing when engines is invalid', () => {

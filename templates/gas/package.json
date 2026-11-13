@@ -1,6 +1,10 @@
 {
   "type": "module",
   "prettier": "gasdev/prettier",
-  "overrides": {},
-  "claspOverrides": {}
+  "overrides": {
+    "minimatch": "^11.0.1"
+  },
+  "claspOverrides": {
+    "gaxios": "^7.3.1"
+  }
 }
