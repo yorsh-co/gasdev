@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -120,6 +121,7 @@ describe('runClean', () => {
     }
     expect(runClean(root, 'link/a')).toBe(0);
     expect(existsSync(join(base, 'missing'))).toBe(false);
+    expect(lstatSync(join(root, 'link')).isSymbolicLink()).toBe(true);
   });
 
   it('reports filesystem errors as CleanError', (ctx) => {
