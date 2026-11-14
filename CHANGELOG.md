@@ -15,6 +15,8 @@
 ### Changed
 
 - Dev-only: `npm run lint:workflows` validates every file in `.github/workflows`
+- Local `gasdev deploy` without `~/.clasprc.json` now fails before prompting, with a `clasp login` hint; the CI message is unchanged
+- Dev-only: CLI tests inject `readHead` instead of running `git rev-parse HEAD`
 
 ---
 
