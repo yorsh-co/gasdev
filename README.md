@@ -104,6 +104,7 @@ The connection is metadata: `loadOrder` in gas-lock's `gasdev` key becomes `gasL
 - **Git-flow release branch**: the `release/X.Y.Z` branch where a version is prepared before it is merged and tagged. It is not the dist branch.
 - **Drift**: a difference between your project and the template that `gasdev check` compares it with.
 - **Preset**: the project type in `gasdev.preset`: `gas` (the default) for Apps Script TypeScript projects, or `node` for plain JavaScript Node tooling. It selects the templates and the keys that `gasdev check` accepts.
+- **Project type**: `gasdev.type` (gas preset only, optional): `library` (consumed by other Apps Script projects, released with `gasdev release`), `app` (a deployed Apps Script project) or `webapp` (an `app` also redeployed as a web app). `gasdev init` prompts for it when unset and persists it; `check` validates it.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -146,7 +147,7 @@ Add it to your project's `package.json` as a dev dependency, using a semver rang
 For a new project:
 
 1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) as dev dependencies (see [Requirements](#requirements) and [Install](#install)), then run `npm install`.
-2. For plain JavaScript tooling, set `"gasdev": { "preset": "node" }` in `package.json`.
+2. For plain JavaScript tooling, set `"gasdev": { "preset": "node" }` in `package.json`. For an Apps Script project, optionally set `"gasdev": { "type": "library" }` (or `"app"`, `"webapp"`); `init` asks for it in a terminal when it is unset and saves the answer. Without a terminal it prints a note and skips the type-driven setup.
 3. Run `npx gasdev init` to create the ignore files, `.github/dependabot.yml`, the missing `package.json` fields (`type`, `prettier`, `engines.node`, `overrides`), the missing required scripts and placeholders for `build`, `build:watch` and `typecheck`.
 4. Add the config `init` does not create: [Prettier](#prettier), [TypeScript](#typescript) and [ESLint](#eslint). Replace the `build`, `build:watch` and `typecheck` placeholders with the project's commands, and add `rimraf` as a dev dependency for the `clean` script.
 5. Run `npm install` again to install the dependencies you added in step 4 (including `rimraf`), then `npm run check`.

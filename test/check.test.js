@@ -10,7 +10,12 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { placeholderScript } from '../bin/check.js';
+import {
+  CheckError,
+  chooseProjectType,
+  initProject,
+  placeholderScript,
+} from '../bin/check.js';
 import { REPO_ROOT } from './support.js';
 
 const BIN = join(REPO_ROOT, 'bin', 'gasdev.js');
@@ -664,7 +669,7 @@ describe('check (preset specifics)', () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('unknown "gasdev" key(s): presets');
     expect(result.stderr).toContain(
-      '(expected: preset, loadOrder, peers, gasTest, html, bundle, release, ci)',
+      '(expected: preset, type, loadOrder, peers, gasTest, html, bundle, release, ci)',
     );
   });
 
@@ -1205,6 +1210,95 @@ describe('init', () => {
     expect(result.status).toBe(2);
     expect(result.stderr).toContain(message);
     expect(existsSync(join(dir, '.gitignore'))).toBe(false);
+  });
+});
+
+describe('gasdev.type', () => {
+  /**
+   * @param {Record<string, unknown>} [extra]
+   * @returns {string}
+   */
+  function emptyProject(extra = {}) {
+    const dir = mkdtempSync(join(tmpdir(), 'gasdev-type-'));
+    dirs.push(dir);
+    writePackage(dir, { name: 'consumer', ...extra });
+    return dir;
+  }
+
+  it('rejects an unknown type', () => {
+    const dir = createCleanProject('gas', { gasdev: { type: 'lib' } });
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'unknown type "lib" (expected: library, app, webapp)',
+    );
+  });
+
+  it('rejects a type with the node preset', () => {
+    const dir = createCleanProject('node', {
+      gasdev: { preset: 'node', type: 'app' },
+    });
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('"gasdev.type" requires the gas preset');
+  });
+
+  it.each(['library', 'app', 'webapp'])('accepts %s', (type) => {
+    const dir = createCleanProject('gas', { gasdev: { type } });
+    expect(run(dir, ['check']).status).toBe(0);
+  });
+
+  describe('chooseProjectType', () => {
+    it('returns the chosen type', async () => {
+      const prompt = async () => ({ type: 'webapp' });
+      expect(await chooseProjectType(prompt)).toBe('webapp');
+    });
+
+    it('throws when cancelled', async () => {
+      await expect(chooseProjectType(async () => ({}))).rejects.toThrow(
+        new CheckError('init cancelled'),
+      );
+    });
+  });
+
+  describe('initProject with a type', () => {
+    it('persists it once and not again on rerun', () => {
+      const dir = emptyProject();
+      const first = initProject(dir, { type: 'app' });
+      expect(first).toContain('package.json: set gasdev.type to "app"');
+      expect(readPackage(dir).gasdev).toEqual({ type: 'app' });
+      expect(initProject(dir, { type: 'app' })).toEqual([]);
+    });
+
+    it('keeps other gasdev keys', () => {
+      const dir = emptyProject({ gasdev: { loadOrder: ['a.ts'] } });
+      initProject(dir, { type: 'library' });
+      expect(readPackage(dir).gasdev).toEqual({
+        loadOrder: ['a.ts'],
+        type: 'library',
+      });
+    });
+
+    it('does not override a configured type', () => {
+      const dir = emptyProject({ gasdev: { type: 'app' } });
+      initProject(dir, { type: 'library' });
+      expect(readPackage(dir).gasdev.type).toBe('app');
+    });
+  });
+
+  it('init without a TTY prints the note and still runs the rest', () => {
+    const dir = emptyProject();
+    const result = run(dir, ['init']);
+    expect(result.stdout).toContain(
+      'gasdev.type is not set; set it in package.json (library, app or webapp) and rerun init',
+    );
+    expect(readPackage(dir).gasdev).toBeUndefined();
+    expect(existsSync(join(dir, '.gitignore'))).toBe(true);
+  });
+
+  it('init with a configured type prints no note', () => {
+    const dir = emptyProject({ gasdev: { type: 'app' } });
+    expect(run(dir, ['init']).stdout).not.toContain('gasdev.type is not set');
   });
 });
 

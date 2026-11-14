@@ -7,8 +7,10 @@ import { readPeerTypesVersion } from '../src/release/peer-types.js';
 import { HtmlError, compareModule } from './html.js';
 
 const PRESETS = ['gas', 'node'];
+const PROJECT_TYPES = ['library', 'app', 'webapp'];
 const KNOWN_KEYS = [
   'preset',
+  'type',
   'loadOrder',
   'peers',
   'gasTest',
@@ -108,6 +110,7 @@ const SELF_TEST = 'npm run test:coverage';
 /**
  * @typedef {object} ResolvedConfig
  * @property {string} preset Preset name; `gas` when unset.
+ * @property {string | undefined} [type] Project type (`library`, `app` or `webapp`); undefined when unset.
  * @property {string[] | undefined} loadOrder Source files under `src/` in load order.
  * @property {Record<string, string> | undefined} peers Optional sibling libraries and their version ranges.
  * @property {GasTestConfig | undefined} gasTest Settings for tests that run in Apps Script.
@@ -417,7 +420,16 @@ function resolveConfig(pkg) {
       `package.json: unknown preset ${JSON.stringify(preset)} (expected: ${PRESETS.join(', ')})`,
     );
   }
-  for (const key of ['loadOrder', 'peers', 'gasTest', 'html']) {
+  const type = config['type'];
+  if (
+    type !== undefined &&
+    (typeof type !== 'string' || !PROJECT_TYPES.includes(type))
+  ) {
+    throw new CheckError(
+      `package.json: unknown type ${JSON.stringify(type)} (expected: ${PROJECT_TYPES.join(', ')})`,
+    );
+  }
+  for (const key of ['type', 'loadOrder', 'peers', 'gasTest', 'html']) {
     if (config[key] !== undefined && preset !== 'gas') {
       throw new CheckError(
         `package.json: "gasdev.${key}" requires the gas preset`,
@@ -436,6 +448,7 @@ function resolveConfig(pkg) {
   }
   return {
     preset,
+    type,
     loadOrder:
       config['loadOrder'] === undefined
         ? undefined
@@ -959,6 +972,44 @@ function addPackageFields(pkg, preset) {
 }
 
 /**
+ * Asks which kind of project this is.
+ *
+ * @param {(question: import('prompts').PromptObject) => Promise<Record<string, any>>} prompt A `prompts`-compatible function.
+ * @returns {Promise<string>} One of `library`, `app` or `webapp`.
+ * @throws {CheckError} When the prompt is cancelled.
+ */
+export async function chooseProjectType(prompt) {
+  const { type } = await prompt({
+    type: 'select',
+    name: 'type',
+    message: 'Project type',
+    choices: [
+      {
+        title: 'library',
+        description:
+          'consumed by other Apps Script projects; released with gasdev release',
+        value: 'library',
+      },
+      {
+        title: 'app',
+        description:
+          'a deployed Apps Script project (Sheets, Forms, Gmail, triggers, webhooks)',
+        value: 'app',
+      },
+      {
+        title: 'webapp',
+        description: 'an app that is also redeployed as a web app',
+        value: 'webapp',
+      },
+    ],
+  });
+  if (type === undefined) {
+    throw new CheckError('init cancelled');
+  }
+  return type;
+}
+
+/**
  * Scaffolds or repairs a project, for `init` and `check --fix`: applies the
  * ignore-file fixes, creates `.github/dependabot.yml` when absent, adds the
  * missing required scripts and adds placeholders for missing present-only ones.
@@ -967,12 +1018,14 @@ function addPackageFields(pkg, preset) {
  * nothing. package.json is written once, and only when it changed.
  *
  * @param {string} cwd Project root.
+ * @param {{ type?: string | undefined }} [options] `type`: project type chosen by the
+ *   user; persisted as `gasdev.type` when the project has none.
  * @returns {string[]} One message per change.
  * @throws {CheckError} When package.json or the `gasdev` field is unusable or invalid.
  */
-export function initProject(cwd) {
+export function initProject(cwd, { type } = {}) {
   const pkg = readPackage(cwd);
-  const { preset, gasTest } = resolveConfig(pkg);
+  const { preset, gasTest, type: configuredType } = resolveConfig(pkg);
   if (pkg['scripts'] !== undefined && !isRecord(pkg['scripts'])) {
     throw new CheckError('package.json: scripts must be an object');
   }
@@ -991,6 +1044,15 @@ export function initProject(cwd) {
     ...addScripts(pkg, preset, gasTest),
     ...addPackageFields(pkg, preset),
   ];
+  if (type !== undefined && configuredType === undefined) {
+    if (preset !== 'gas' || !PROJECT_TYPES.includes(type)) {
+      throw new CheckError(
+        `package.json: cannot set "gasdev.type" to ${JSON.stringify(type)}`,
+      );
+    }
+    pkg['gasdev'] = { ...(isRecord(pkg['gasdev']) ? pkg['gasdev'] : {}), type };
+    pkgMessages.push(`package.json: set gasdev.type to "${type}"`);
+  }
   if (pkgMessages.length > 0) {
     writeFileSync(
       join(cwd, 'package.json'),
