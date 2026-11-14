@@ -16,6 +16,7 @@ import {
   initProject,
   loadConfig,
 } from './check.js';
+import { CleanError, runClean } from './clean.js';
 import { DevError, runDev } from './dev.js';
 import { GasTestError, runBuild, runRun } from './gas-test.js';
 import { GithubError, runGithub } from './github.js';
@@ -44,6 +45,7 @@ const USAGE = `Usage: gasdev check [--fix]
        gasdev setup
        gasdev deploy
        gasdev peers sync [--check]
+       gasdev clean [<dir>]
 
 Reports drift of .gitignore, .prettierignore, .github/dependabot.yml and the
 standard package.json scripts from the preset templates. Writes only with --fix
@@ -85,6 +87,8 @@ Commands:
                    "peers" entry from the peer's highest release tag that
                    satisfies its range (without the @version line); needs
                    network access
+  clean [<dir>]    Remove <dir> (default: dist) inside the project; succeeds when
+                   absent
 
 Options:
   -h, --help       Show this help
@@ -158,6 +162,7 @@ export async function main(argv) {
   const isHtml = command === 'html' && rest.length === 0;
   const isDev = command === 'dev' && rest.length === 0;
   const isPeers = command === 'peers' && rest.join(' ') === 'sync';
+  const isClean = command === 'clean' && rest.length <= 1;
   if (
     !isCheck &&
     !isInit &&
@@ -166,7 +171,8 @@ export async function main(argv) {
     !isRun &&
     !isHtml &&
     !isDev &&
-    !isPeers
+    !isPeers &&
+    !isClean
   ) {
     return usageError(`unknown command: ${positionals.join(' ')}.`);
   }
@@ -191,6 +197,7 @@ export async function main(argv) {
     return usageError('--fix is only valid with check or github.');
   }
   try {
+    if (isClean) return runClean(process.cwd(), rest[0]);
     if (isGithub) return runGithub({ fix: values.fix === true });
     if (isHtml) {
       const { html } = loadConfig(process.cwd());
@@ -243,6 +250,7 @@ export async function main(argv) {
   } catch (error) {
     if (
       error instanceof CheckError ||
+      error instanceof CleanError ||
       error instanceof DevError ||
       error instanceof GasTestError ||
       error instanceof GithubError ||

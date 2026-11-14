@@ -1,6 +1,6 @@
 {
   "required": {
-    "clean": "rimraf dist",
+    "clean": "gasdev clean",
     "build:format": "npm run check && npm run build && npm run format:dist",
     "lint": "eslint . && echo '✓ Lint passed'",
     "lint:fix": "eslint . --fix",

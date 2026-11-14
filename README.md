@@ -149,8 +149,8 @@ For a new project:
 1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) as dev dependencies (see [Requirements](#requirements) and [Install](#install)), then run `npm install`.
 2. For plain JavaScript tooling, set `"gasdev": { "preset": "node" }` in `package.json`. For an Apps Script project, optionally set `"gasdev": { "type": "library" }` (or `"app"`, `"webapp"`); `init` asks for it in a terminal when it is unset and saves the answer. Without a terminal it prints a note and skips the type-driven setup.
 3. Run `npx gasdev init` to create the ignore files, `.github/dependabot.yml`, the missing `package.json` fields (`type`, `prettier`, `engines.node`, `overrides`), the missing required scripts and placeholders for `build`, `build:watch` and `typecheck`.
-4. When the type is known, `init` also creates `tsconfig.json`, `tsconfig.test.json` and `eslint.config.js` (plus `gas-test/tsconfig.json` when `gasdev.gasTest` is configured, and `tsconfig.frontend.json` with a `web` ESLint block for `webapp`), each only when absent; see [TypeScript](#typescript) and [ESLint](#eslint) to adjust them. `check --fix` does not create them. Replace the `build`, `build:watch` and `typecheck` placeholders with the project's commands, and add `rimraf` as a dev dependency for the `clean` script.
-5. Run `npm install` again to install the dependencies you added in step 4 (including `rimraf`), then `npm run check`.
+4. When the type is known, `init` also creates `tsconfig.json`, `tsconfig.test.json` and `eslint.config.js` (plus `gas-test/tsconfig.json` when `gasdev.gasTest` is configured, and `tsconfig.frontend.json` with a `web` ESLint block for `webapp`), each only when absent; see [TypeScript](#typescript) and [ESLint](#eslint) to adjust them. `check --fix` does not create them. Replace the `build`, `build:watch` and `typecheck` placeholders with the project's commands.
+5. Run `npm install` again to install the dependencies you added in step 4, then `npm run check`.
 
 For an existing project, follow [Migrating an existing project](#migrating-an-existing-project).
 
@@ -420,11 +420,11 @@ Required lines per preset:
 | `.gitignore`      | `node_modules/`, `dist/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` | `node_modules/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` |
 | `.prettierignore` | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`                       | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`              |
 
-Required scripts, exact values, for the `gas` preset. They assume `rimraf` is a dev dependency of the project. `release` and `build:release` are required for `library` projects (or when `gasdev.type` is unset) only:
+Required scripts, exact values, for the `gas` preset. `release` and `build:release` are required for `library` projects (or when `gasdev.type` is unset) only:
 
 | Script          | Value                                                                                       |
 | --------------- | ------------------------------------------------------------------------------------------- |
-| `clean`         | `rimraf dist`                                                                               |
+| `clean`         | `gasdev clean`                                                                              |
 | `release`       | `gasdev release`                                                                            |
 | `build:format`  | `npm run check && npm run build && npm run format:dist`                                     |
 | `build:release` | `npm run build:format && npm run release`                                                   |
@@ -436,6 +436,8 @@ Required scripts, exact values, for the `gas` preset. They assume `rimraf` is a 
 | `check`         | `npm run format:check && npm run lint && npm run typecheck && npm run test && gasdev check` |
 | `test`          | `vitest run`                                                                                |
 | `test:watch`    | `vitest`                                                                                    |
+
+A `clean` script still set to `rimraf dist` is reported as a warning, not drift: change it to `gasdev clean`, then run `npm uninstall rimraf`. `check --fix` does not rewrite it.
 
 The `gas` preset also requires `build`, `build:watch` and `typecheck` to exist, with any value; the placeholder that `init` and `check --fix` add is reported as a warning. With `gasTest` configured it also requires `test:gas:build` (`gasdev gas-test build`) and `test:gas` (`gasdev gas-test run`).
 
@@ -914,6 +916,14 @@ Use `gasdev peers sync [--check]` in a library with peers: it keeps `src/interna
   }
 }
 ```
+
+### Clean
+
+Use `gasdev clean [<dir>]` to remove a build directory. It is the `clean` script of the `gas` preset.
+
+- `<dir>` defaults to `dist`, and a missing directory is not an error.
+- It works the same on every platform and needs no other dependency.
+- It refuses the project root and any path outside it, including a path that leaves the project through a symlink (exit 1).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

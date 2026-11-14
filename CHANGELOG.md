@@ -12,6 +12,7 @@
 - `gasdev check` reports a `gas-deploy.yml@vX.Y.Z` ref that differs from the installed gasdev (or a non-version ref), and `init`/`check --fix` update the version in place; see [ADR 0031](docs/adr/0031-deploy-workflow-version.md)
 - On a terminal outside GitHub Actions, `gasdev deploy` uses `~/.clasprc.json` when `CLASPRC_JSON` is unset and asks for the script ID, the deployment ID (empty: push only) and the version description (default `HEAD`), pre-filled from `.env`; nothing is saved; see [ADR 0032](docs/adr/0032-local-interactive-deploy.md)
 - On a terminal, `gasdev gas-test run` asks for a missing script ID and for the spreadsheet ID; answers apply to that run only and are not saved, and CI and piped runs are unchanged
+- `gasdev clean [<dir>]` removes a directory (default `dist`) inside the project without needing `rimraf`; see [ADR 0033](docs/adr/0033-clean-command.md)
 
 ### Changed
 
@@ -24,6 +25,7 @@
 
 - Dev-only: the coverage gate in `npm run check` passes again; no test imports `bin/gasdev.js` in-process, which dropped its subprocess coverage, and the GitHub Actions prompt gate for `gas-test run` moved into `runRun`
 - Dev-only: vitest no longer collects tests from agent worktrees under `.claude/`
+- The gas template `clean` script is now `gasdev clean`, and `gasdev check` warns (not drift) on the legacy `rimraf dist` value; to migrate, change `"clean"` to `"gasdev clean"`, then run `npm uninstall rimraf`; see [ADR 0033](docs/adr/0033-clean-command.md)
 
 ---
 
