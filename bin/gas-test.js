@@ -1,5 +1,5 @@
 // @ts-check
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import {
   mkdirSync,
@@ -14,6 +14,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BundleError, bundle } from '../src/bundle/index.js';
 import { resolveProjectClaspBin } from '../src/clasp-bin.js';
+import { startSpinner } from '../src/spinner.js';
 import ts from 'typescript';
 import { loadConfig } from './check.js';
 
@@ -191,28 +192,34 @@ export function claspBin(root, resolve) {
 }
 
 /**
+ * @typedef {{ status: number | null, stdout: string, stderr: string }} ClaspResult
+ */
+
+/**
  * Runs clasp through the current Node binary, without a shell or PATH lookup.
  *
  * @param {string} bin Path of the clasp bin script.
  * @param {string[]} args
  * @param {string} cwd
- * @returns {import('node:child_process').SpawnSyncReturns<string>}
+ * @returns {Promise<ClaspResult>}
  * @throws {GasTestError} When clasp cannot be started.
  */
 function clasp(bin, args, cwd) {
-  const result = spawnSync(process.execPath, [bin, ...args], {
-    cwd,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(process.execPath, [bin, ...args], { cwd });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8').on('data', (chunk) => (stdout += chunk));
+    child.stderr.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
+    child.on('error', (error) =>
+      reject(new GasTestError(`cannot run clasp: ${error.message}`)),
+    );
+    child.on('close', (status) => resolvePromise({ status, stdout, stderr }));
   });
-  if (result.error) {
-    throw new GasTestError(`cannot run clasp: ${result.error.message}`);
-  }
-  return result;
 }
 
 /**
- * @param {import('node:child_process').SpawnSyncReturns<string>} result
+ * @param {ClaspResult} result
  * @returns {string} Trimmed stdout and stderr.
  */
 function output(result) {
@@ -225,10 +232,11 @@ function output(result) {
  * @param {string} bin
  * @param {string[]} args
  * @param {string} cwd
+ * @returns {Promise<void>}
  * @throws {GasTestError} With clasp's output when it exits non-zero.
  */
-function claspStep(bin, args, cwd) {
-  const result = clasp(bin, args, cwd);
+async function claspStep(bin, args, cwd) {
+  const result = await clasp(bin, args, cwd);
   if (result.status !== 0) {
     throw new GasTestError(
       `clasp ${args[0]} failed (exit ${result.status}):\n${output(result)}`,
@@ -246,10 +254,11 @@ function claspStep(bin, args, cwd) {
  * @param {string} scriptId
  * @param {string[]} scopes
  * @param {string} code The built script.
+ * @returns {Promise<void>}
  * @throws {GasTestError} When clasp fails.
  */
-function prepareProject(bin, dir, scriptId, scopes, code) {
-  claspStep(bin, ['clone', scriptId, '--rootDir', dir], dir);
+async function prepareProject(bin, dir, scriptId, scopes, code) {
+  await claspStep(bin, ['clone', scriptId, '--rootDir', dir], dir);
   for (const name of readdirSync(dir)) {
     if (name !== '.clasp.json') rmSync(join(dir, name), { recursive: true });
   }
@@ -358,8 +367,7 @@ export async function runRun(cwd, { keep = false, prompt: givenPrompt } = {}) {
     const answer = await prompt({
       type: 'text',
       name: 'spreadsheetId',
-      message:
-        'Test spreadsheet ID (empty: use the GAS_TEST_SPREADSHEET_ID Script Property)',
+      message: 'Test spreadsheet ID (optional, press Enter to skip)',
       validate: (/** @type {string} */ v) =>
         v === '' ||
         /^[A-Za-z0-9_-]+$/.test(v) ||
@@ -374,10 +382,13 @@ export async function runRun(cwd, { keep = false, prompt: givenPrompt } = {}) {
   const bin = claspBin(cwd);
 
   const dir = mkdtempSync(join(tmpdir(), 'gasdev-run-'));
+  const spinner = startSpinner(process.stderr, 'Preparing test project...');
   try {
-    prepareProject(bin, dir, scriptId, scopes, code);
-    claspStep(bin, ['push', '--force'], dir);
-    const run = clasp(
+    await prepareProject(bin, dir, scriptId, scopes, code);
+    spinner.update('Pushing test project...');
+    await claspStep(bin, ['push', '--force'], dir);
+    spinner.update('Running tests...');
+    const run = await clasp(
       bin,
       [
         'run',
@@ -386,6 +397,7 @@ export async function runRun(cwd, { keep = false, prompt: givenPrompt } = {}) {
       ],
       dir,
     );
+    spinner.stop();
     const decoded = decodeResults(run.stdout);
     if (!decoded) {
       const text = output(run);
@@ -403,6 +415,7 @@ export async function runRun(cwd, { keep = false, prompt: givenPrompt } = {}) {
     );
     return decoded.results.some((r) => r.status === 'FAIL') ? 1 : 0;
   } finally {
+    spinner.stop();
     if (keep) process.stdout.write(`Test project kept at ${dir}\n`);
     else rmSync(dir, { recursive: true, force: true });
   }
