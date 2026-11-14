@@ -224,9 +224,19 @@ describe('main deploy local prompts', () => {
     const env = /** @type {NodeJS.ProcessEnv} */ ({});
     vi.mocked(deploy).mockClear();
     vi.mocked(deploy).mockResolvedValueOnce();
-    const code = await main(['deploy'], { ...context, env, cwd, home, prompt });
+    const code = await main(['deploy'], {
+      ...context,
+      env,
+      cwd,
+      home,
+      prompt,
+      readHead: () => 'abc123',
+    });
     expect(code).toBe(0);
     expect(prompt).toHaveBeenCalledTimes(3);
+    expect(/** @type {unknown[][]} */ (prompt.mock.calls)[2]?.[0]).toEqual(
+      expect.objectContaining({ initial: 'abc123' }),
+    );
     expect(deploy).toHaveBeenCalledWith(
       expect.objectContaining({
         env: {

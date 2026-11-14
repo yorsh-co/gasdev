@@ -26,6 +26,7 @@ Options:
  * @property {typeof import('./clasp.js').createClasp} [createClasp] Clasp factory; tests inject a fake binary.
  * @property {import('./local-inputs.js').Prompt | undefined} [prompt] `prompts`-compatible function, set only on an interactive terminal; enables local deploy prompts.
  * @property {string} [home] Home directory holding `.clasprc.json`; tests inject a temporary one.
+ * @property {(() => string | undefined) | undefined} [readHead] Reads the current commit for the version prompt; tests inject it. Defaults to `git rev-parse HEAD`.
  */
 
 /**
@@ -91,6 +92,7 @@ export async function main(argv, context) {
         prompt: context.prompt,
         cwd: context.cwd,
         home: context.home,
+        readHead: context.readHead,
       });
       await deploy({ ...context, env });
     } else {
