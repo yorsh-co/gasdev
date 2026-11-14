@@ -209,11 +209,7 @@ export async function main(argv) {
       return await runRun(process.cwd(), {
         keep: values.keep === true,
         prompt:
-          process.stdin.isTTY &&
-          process.stdout.isTTY &&
-          process.env.GITHUB_ACTIONS !== 'true'
-            ? prompts
-            : undefined,
+          process.stdin.isTTY && process.stdout.isTTY ? prompts : undefined,
       });
     }
     const fixed = isInit || values.fix === true;
