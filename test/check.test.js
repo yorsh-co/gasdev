@@ -1378,6 +1378,53 @@ describe('gasdev.type', () => {
     });
   });
 
+  describe('clasp and manifest templates', () => {
+    const NAMES = ['.clasp.example.json', 'appsscript.example.json'];
+    const present = (/** @type {string} */ dir) =>
+      NAMES.filter((f) => existsSync(join(dir, f)));
+
+    it.each([
+      ['app', NAMES],
+      ['webapp', NAMES],
+      ['library', []],
+    ])('init creates them for %s: %j', (type, expected) => {
+      const dir = emptyProject({ gasdev: { type } });
+      const messages = initProject(dir, { init: true });
+      expect(present(dir)).toEqual(expected);
+      for (const f of expected) {
+        expect(messages).toContain(
+          `${f}: created; set oauthScopes in appsscript.example.json`,
+        );
+      }
+    });
+
+    it('webapp manifest is least-privileged, app has no webapp block', () => {
+      const web = emptyProject({ gasdev: { type: 'webapp' } });
+      initProject(web, { init: true });
+      expect(
+        JSON.parse(readFileSync(join(web, 'appsscript.example.json'), 'utf8'))
+          .webapp,
+      ).toEqual({ executeAs: 'USER_DEPLOYING', access: 'MYSELF' });
+      const app = emptyProject({ gasdev: { type: 'app' } });
+      initProject(app, { init: true });
+      expect(
+        JSON.parse(readFileSync(join(app, 'appsscript.example.json'), 'utf8')),
+      ).not.toHaveProperty('webapp');
+    });
+
+    it('leaves existing files untouched and is skipped without init', () => {
+      const dir = emptyProject({ gasdev: { type: 'app' } });
+      initProject(dir);
+      expect(present(dir)).toEqual([]);
+      writeFileSync(join(dir, '.clasp.example.json'), '{ "mine": true }\n');
+      initProject(dir, { init: true });
+      expect(readFileSync(join(dir, '.clasp.example.json'), 'utf8')).toBe(
+        '{ "mine": true }\n',
+      );
+      expect(present(dir)).toEqual(NAMES);
+    });
+  });
+
   it('init without a TTY prints the note and still runs the rest', () => {
     const dir = emptyProject();
     const result = run(dir, ['init']);

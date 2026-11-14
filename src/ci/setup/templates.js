@@ -1,17 +1,24 @@
 // @ts-check
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DeployError } from '../errors.js';
+import { templateDefaults } from '../manifest-defaults.js';
 
-/** Default content of each template, keyed by file name. */
-const DEFAULTS = {
-  '.clasp.example.json': { rootDir: 'dist' },
-  'appsscript.example.json': {
-    runtimeVersion: 'V8',
-    exceptionLogging: 'STACKDRIVER',
-    oauthScopes: [],
-  },
-};
+/**
+ * Reads `gasdev.type` from the project's `package.json`.
+ *
+ * @param {string} cwd Project root.
+ * @returns {string | undefined} The type, or undefined when unset or unreadable.
+ */
+function readProjectType(cwd) {
+  try {
+    const pkg = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'));
+    const type = pkg?.gasdev?.type;
+    return typeof type === 'string' ? type : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Offers to create the clasp and manifest templates that are missing from a project.
@@ -27,9 +34,9 @@ export async function createMissingTemplates(cwd, io) {
   if (!existsSync(join(cwd, 'package.json'))) {
     return;
   }
-  const missing = Object.entries(DEFAULTS).filter(
-    ([name]) => !existsSync(join(cwd, name)),
-  );
+  const missing = Object.entries(
+    templateDefaults(readProjectType(cwd) ?? 'app'),
+  ).filter(([name]) => !existsSync(join(cwd, name)));
   if (missing.length === 0) {
     return;
   }

@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import semver from 'semver';
+import { templateDefaults } from '../src/ci/manifest-defaults.js';
 import { legacyKeyMessage } from '../src/legacy-keys.js';
 import { readPeerTypesVersion } from '../src/release/peer-types.js';
 import { HtmlError, compareModule } from './html.js';
@@ -932,6 +933,28 @@ function createTypeFiles(cwd, type, gasTest) {
 }
 
 /**
+ * Creates the clasp and manifest templates of a deployed project (`app` or
+ * `webapp`), each only when absent.
+ *
+ * @param {string} cwd
+ * @param {string} type One of `library`, `app` or `webapp`.
+ * @returns {string[]} One message per file created.
+ */
+function createDeployTemplates(cwd, type) {
+  if (type === 'library') return [];
+  const messages = [];
+  for (const [file, value] of Object.entries(templateDefaults(type))) {
+    const path = join(cwd, file);
+    if (existsSync(path)) continue;
+    writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+    messages.push(
+      `${file}: created; set oauthScopes in appsscript.example.json`,
+    );
+  }
+  return messages;
+}
+
+/**
  * Adds the required scripts missing from package.json, then a placeholder for
  * each missing script that must only be present, after the existing ones.
  * Existing scripts are never changed. Mutates `pkg`; the caller writes it.
@@ -1099,6 +1122,7 @@ export function initProject(cwd, { type, init = false } = {}) {
   const projectType = configuredType ?? type;
   if (init && preset === 'gas' && projectType !== undefined) {
     files.push(...createTypeFiles(cwd, projectType, gasTest !== undefined));
+    files.push(...createDeployTemplates(cwd, projectType));
   }
   return [...files, ...pkgMessages];
 }
