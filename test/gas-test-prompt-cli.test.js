@@ -11,8 +11,6 @@ describe('gasdev gas-test run on a CI terminal', () => {
     stdin: Object.getOwnPropertyDescriptor(process.stdin, 'isTTY'),
     stdout: Object.getOwnPropertyDescriptor(process.stdout, 'isTTY'),
   };
-  const argv = process.argv;
-  const exitCode = process.exitCode;
   const cwd = process.cwd();
   /** @type {string | undefined} */
   let dir;
@@ -26,8 +24,6 @@ describe('gasdev gas-test run on a CI terminal', () => {
       if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor);
       else delete (/** @type {any} */ (stream).isTTY);
     }
-    process.argv = argv;
-    process.exitCode = exitCode;
     process.chdir(cwd);
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
@@ -62,9 +58,6 @@ describe('gasdev gas-test run on a CI terminal', () => {
     const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
     process.chdir(dir);
 
-    // Importing the entry point also runs it once; keep that run harmless.
-    process.argv = ['node', 'gasdev', '--version'];
-    vi.spyOn(process.stdout, 'write').mockReturnValue(true);
     const { main } = await import('../bin/gasdev.js');
 
     const status = await main(['gas-test', 'run']);

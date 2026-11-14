@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import prompts from 'prompts';
 import pkg from '../package.json' with { type: 'json' };
@@ -257,4 +259,20 @@ export async function main(argv) {
   }
 }
 
-process.exitCode = await main(process.argv.slice(2));
+/**
+ * Tells whether this module is the process entry point, following symlinks
+ * such as the one npm creates in node_modules/.bin.
+ *
+ * @returns {boolean} False when the entry script is missing or unresolvable.
+ */
+function isEntryPoint() {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return realpathSync(entry) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) process.exitCode = await main(process.argv.slice(2));
