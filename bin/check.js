@@ -872,11 +872,12 @@ function refVersion(ref) {
  * @returns {string}
  */
 function gasdevVersion() {
-  const pkg = readJson(
-    new URL('../package.json', import.meta.url),
-    'gasdev package.json',
-  );
-  return /** @type {string} */ (/** @type {any} */ (pkg).version);
+  const pkg = readJson(GASDEV_PACKAGE, 'gasdev package.json');
+  const version = isRecord(pkg) ? pkg['version'] : undefined;
+  if (typeof version !== 'string') {
+    throw new CheckError('gasdev package.json: version is missing');
+  }
+  return version;
 }
 
 /**
@@ -1113,17 +1114,13 @@ function createDeployWorkflow(cwd, type) {
   const file = '.github/workflows/deploy.yml';
   const path = join(cwd, file);
   if (type === 'library' || existsSync(path)) return [];
-  const pkg = readJson(GASDEV_PACKAGE, 'gasdev package.json');
-  const version = isRecord(pkg) ? pkg['version'] : undefined;
+  const version = gasdevVersion();
   const template = readFileSync(
     new URL('gas/files/.github/workflows/deploy.yml', TEMPLATES),
     'utf8',
   );
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(
-    path,
-    template.replaceAll('{{GASDEV_VERSION}}', String(version)),
-  );
+  writeFileSync(path, template.replaceAll('{{GASDEV_VERSION}}', version));
   return [
     `${file}: created; add the dev and live environments (see "CI deployment" in the README)`,
   ];
