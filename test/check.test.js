@@ -1425,6 +1425,45 @@ describe('gasdev.type', () => {
     });
   });
 
+  describe('deploy workflow', () => {
+    const FILE = '.github/workflows/deploy.yml';
+    const version = JSON.parse(
+      readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
+    ).version;
+
+    it.each(['app', 'webapp'])('init creates it for %s', (type) => {
+      const dir = emptyProject({ gasdev: { type } });
+      const messages = initProject(dir, { init: true });
+      expect(messages).toContain(
+        `${FILE}: created; add the dev and live environments (see "CI deployment" in the README)`,
+      );
+      const text = readFileSync(join(dir, FILE), 'utf8');
+      const template = readFileSync(
+        join(REPO_ROOT, 'templates/gas/files', FILE),
+        'utf8',
+      );
+      expect(text).not.toContain('{{GASDEV_VERSION}}');
+      expect(text).toBe(template.replaceAll('{{GASDEV_VERSION}}', version));
+    });
+
+    it('does not create it for a library or without init', () => {
+      const lib = emptyProject({ gasdev: { type: 'library' } });
+      initProject(lib, { init: true });
+      expect(existsSync(join(lib, FILE))).toBe(false);
+      const app = emptyProject({ gasdev: { type: 'app' } });
+      initProject(app);
+      expect(existsSync(join(app, FILE))).toBe(false);
+    });
+
+    it('leaves an existing file untouched', () => {
+      const dir = emptyProject({ gasdev: { type: 'app' } });
+      mkdirSync(join(dir, '.github/workflows'), { recursive: true });
+      writeFileSync(join(dir, FILE), 'mine\n');
+      initProject(dir, { init: true });
+      expect(readFileSync(join(dir, FILE), 'utf8')).toBe('mine\n');
+    });
+  });
+
   it('init without a TTY prints the note and still runs the rest', () => {
     const dir = emptyProject();
     const result = run(dir, ['init']);

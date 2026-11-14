@@ -1453,6 +1453,10 @@ jobs:
 
 `develop` deploys to the `dev` environment and `main` to `live`. `secrets: inherit` is enough: the secret is resolved from the environment the job runs in.
 
+#### CI deployment
+
+For `app` and `webapp` projects, `gasdev init` creates `.github/workflows/deploy.yml` (only when absent) pinned to the installed gasdev version. Pushing `develop` deploys `dev` and pushing `main` deploys `live`, so create both [environments](#environments) before the first push. Personal dev copies of the script keep using the local `.clasp.json` written by `gasdev setup`.
+
 #### Environments
 
 | Environment | Branch    | Secret         | Variables                            |
@@ -1464,10 +1468,11 @@ The IDs are variables, not secrets, on purpose: GitHub drops job outputs that co
 
 #### Project types
 
-| Project               | `GAS_DEPLOYMENT_ID` | Result                                   |
-| --------------------- | ------------------- | ---------------------------------------- |
-| Web app               | set                 | Scope check, push, new version, redeploy |
-| Library, bound script | not set             | Push only                                |
+| `gasdev.type`       | `GAS_DEPLOYMENT_ID` | Result                                       |
+| ------------------- | ------------------- | -------------------------------------------- |
+| `webapp`            | set                 | Scope check, push, new version, redeploy     |
+| `app`, bound script | not set             | Push only                                    |
+| `library`           | not applicable      | Released with `gasdev release`, not deployed |
 
 `GAS_DEPLOYMENT_ID` must be a versioned web app deployment, not the HEAD deployment.
 

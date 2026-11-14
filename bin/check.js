@@ -955,6 +955,34 @@ function createDeployTemplates(cwd, type) {
 }
 
 /**
+ * Creates the CI deploy workflow of a deployed project (`app` or `webapp`)
+ * when absent, pinned to gasdev's own version.
+ *
+ * @param {string} cwd
+ * @param {string} type One of `library`, `app` or `webapp`.
+ * @returns {string[]} One message per file created.
+ */
+function createDeployWorkflow(cwd, type) {
+  const file = '.github/workflows/deploy.yml';
+  const path = join(cwd, file);
+  if (type === 'library' || existsSync(path)) return [];
+  const pkg = readJson(GASDEV_PACKAGE, 'gasdev package.json');
+  const version = isRecord(pkg) ? pkg['version'] : undefined;
+  const template = readFileSync(
+    new URL('gas/files/.github/workflows/deploy.yml', TEMPLATES),
+    'utf8',
+  );
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(
+    path,
+    template.replaceAll('{{GASDEV_VERSION}}', String(version)),
+  );
+  return [
+    `${file}: created; add the dev and live environments (see "CI deployment" in the README)`,
+  ];
+}
+
+/**
  * Adds the required scripts missing from package.json, then a placeholder for
  * each missing script that must only be present, after the existing ones.
  * Existing scripts are never changed. Mutates `pkg`; the caller writes it.
@@ -1123,6 +1151,7 @@ export function initProject(cwd, { type, init = false } = {}) {
   if (init && preset === 'gas' && projectType !== undefined) {
     files.push(...createTypeFiles(cwd, projectType, gasTest !== undefined));
     files.push(...createDeployTemplates(cwd, projectType));
+    files.push(...createDeployWorkflow(cwd, projectType));
   }
   return [...files, ...pkgMessages];
 }

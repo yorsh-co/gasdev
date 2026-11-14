@@ -1,6 +1,7 @@
 # 8. Init command
 
 - Status: Accepted
+- Amended by: [ADR 0030](0030-project-type.md)
 - Date: 2026-11-06
 
 ## Context
