@@ -907,7 +907,9 @@ function findDeployRefs(cwd) {
 
 /**
  * Reports `gas-deploy.yml` references that are not pinned to the installed
- * gasdev version. Skipped in gasdev itself.
+ * gasdev version. A `vX.Y.Z` ref older than the installed version within the
+ * same major is a warning (ADR 0034); any other mismatch is drift. Skipped in
+ * gasdev itself.
  *
  * @param {string} cwd Project root.
  * @param {Record<string, unknown>} pkg The project's package.json.
@@ -928,14 +930,17 @@ function checkDeployWorkflowRef(cwd, pkg) {
           },
         ];
       }
-      return refVer === version
-        ? []
-        : [
-            {
-              file,
-              message: `uses gas-deploy.yml@${ref}; installed gasdev is ${version}`,
-            },
-          ];
+      if (refVer === version) return [];
+      const olderSameMajor =
+        semver.major(refVer) === semver.major(version) &&
+        semver.lt(refVer, version);
+      return [
+        {
+          file,
+          message: `uses gas-deploy.yml@${ref}; installed gasdev is ${version}`,
+          ...(olderSameMajor && { warning: true }),
+        },
+      ];
     }),
   );
 }

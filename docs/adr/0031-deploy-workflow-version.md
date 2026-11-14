@@ -1,6 +1,6 @@
 # 31. Deploy workflow version check
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0034](0034-older-deploy-ref-warning.md)
 - Date: 2026-11-13
 
 ## Context
@@ -15,5 +15,5 @@ This is a narrow exception to [ADR 0002](0002-check-fix-ignore-files.md)'s appen
 
 ## Consequences
 
-- A Dependabot bump of gasdev fails `check` in CI until `check --fix` is run and the result committed.
+- A Dependabot bump of gasdev across a major fails `check` in CI until `check --fix` is run and the result committed. Same-major bumps only warn, see [ADR 0034](0034-older-deploy-ref-warning.md).
 - Upgrading gasdev followed by `check --fix` keeps the workflow and the npm package on one version.
