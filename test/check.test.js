@@ -1286,6 +1286,98 @@ describe('gasdev.type', () => {
     });
   });
 
+  describe('type-driven files', () => {
+    const templateFile = (/** @type {string} */ f) =>
+      readFileSync(join(TEMPLATES, 'gas', 'files', f), 'utf8');
+    const ALL = [
+      'tsconfig.json',
+      'tsconfig.test.json',
+      'eslint.config.js',
+      'tsconfig.frontend.json',
+      'gas-test/tsconfig.json',
+    ];
+    const created = (/** @type {string} */ dir) =>
+      ALL.filter((f) => existsSync(join(dir, f)));
+
+    it.each([
+      ['library', ['tsconfig.json', 'tsconfig.test.json', 'eslint.config.js']],
+      ['app', ['tsconfig.json', 'tsconfig.test.json', 'eslint.config.js']],
+      [
+        'webapp',
+        [
+          'tsconfig.json',
+          'tsconfig.test.json',
+          'eslint.config.js',
+          'tsconfig.frontend.json',
+        ],
+      ],
+    ])('init creates the %s file set from the templates', (type, expected) => {
+      const dir = emptyProject({ gasdev: { type } });
+      const messages = initProject(dir, { init: true });
+      expect(created(dir).sort()).toEqual([...expected].sort());
+      for (const file of expected) {
+        expect(messages).toContain(`${file}: created`);
+        const template =
+          type === 'webapp' && file === 'eslint.config.js'
+            ? 'eslint.webapp.config.js'
+            : file;
+        expect(readFileSync(join(dir, file), 'utf8')).toBe(
+          templateFile(template),
+        );
+        if (file.endsWith('.json')) {
+          expect(() =>
+            JSON.parse(readFileSync(join(dir, file), 'utf8')),
+          ).not.toThrow();
+        }
+      }
+      expect(initProject(dir, { init: true })).toEqual([]);
+    });
+
+    it('creates the chosen type files and gas-test/tsconfig.json when configured', () => {
+      const dir = emptyProject({
+        gasdev: {
+          loadOrder: ['a.ts'],
+          gasTest: { scopes: ['https://www.googleapis.com/auth/drive'] },
+        },
+      });
+      const messages = initProject(dir, { type: 'app', init: true });
+      expect(messages).toContain('gas-test/tsconfig.json: created');
+      expect(existsSync(join(dir, 'gas-test', 'tsconfig.json'))).toBe(true);
+    });
+
+    it('leaves existing files untouched', () => {
+      const dir = emptyProject({ gasdev: { type: 'app' } });
+      writeFileSync(join(dir, 'tsconfig.json'), '{ "mine": true }\n');
+      const messages = initProject(dir, { init: true });
+      expect(readFileSync(join(dir, 'tsconfig.json'), 'utf8')).toBe(
+        '{ "mine": true }\n',
+      );
+      expect(messages).not.toContain('tsconfig.json: created');
+      expect(messages).toContain('tsconfig.test.json: created');
+    });
+
+    it('creates nothing without init, or without a known type', () => {
+      const dir = emptyProject({ gasdev: { type: 'webapp' } });
+      initProject(dir);
+      expect(created(dir)).toEqual([]);
+      const untyped = emptyProject();
+      initProject(untyped, { init: true });
+      expect(created(untyped)).toEqual([]);
+    });
+
+    it('check --fix creates none of them', () => {
+      const dir = emptyProject({ gasdev: { type: 'webapp' } });
+      run(dir, ['check', '--fix']);
+      expect(created(dir)).toEqual([]);
+    });
+
+    it('the init command creates them', () => {
+      const dir = emptyProject({ gasdev: { type: 'webapp' } });
+      run(dir, ['init']);
+      expect(existsSync(join(dir, 'tsconfig.frontend.json'))).toBe(true);
+    });
+  });
+
   it('init without a TTY prints the note and still runs the rest', () => {
     const dir = emptyProject();
     const result = run(dir, ['init']);

@@ -896,6 +896,42 @@ function createDependabot(cwd, preset) {
 }
 
 /**
+ * Creates the tsconfig and ESLint files for a project type, each only when absent.
+ *
+ * @param {string} cwd
+ * @param {string} type One of `library`, `app` or `webapp`.
+ * @param {boolean} gasTest Whether `gasdev.gasTest` is configured.
+ * @returns {string[]} One message per file created.
+ */
+function createTypeFiles(cwd, type, gasTest) {
+  /** @type {[string, string][]} Target file and its template under `gas/files`. */
+  const files = [
+    ['tsconfig.json', 'tsconfig.json'],
+    ['tsconfig.test.json', 'tsconfig.test.json'],
+    [
+      'eslint.config.js',
+      type === 'webapp' ? 'eslint.webapp.config.js' : 'eslint.config.js',
+    ],
+  ];
+  if (gasTest) files.push(['gas-test/tsconfig.json', 'gas-test/tsconfig.json']);
+  if (type === 'webapp') {
+    files.push(['tsconfig.frontend.json', 'tsconfig.frontend.json']);
+  }
+  const messages = [];
+  for (const [file, template] of files) {
+    const path = join(cwd, file);
+    if (existsSync(path)) continue;
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      readFileSync(new URL(`gas/files/${template}`, TEMPLATES)),
+    );
+    messages.push(`${file}: created`);
+  }
+  return messages;
+}
+
+/**
  * Adds the required scripts missing from package.json, then a placeholder for
  * each missing script that must only be present, after the existing ones.
  * Existing scripts are never changed. Mutates `pkg`; the caller writes it.
@@ -1018,12 +1054,13 @@ export async function chooseProjectType(prompt) {
  * nothing. package.json is written once, and only when it changed.
  *
  * @param {string} cwd Project root.
- * @param {{ type?: string | undefined }} [options] `type`: project type chosen by the
- *   user; persisted as `gasdev.type` when the project has none.
+ * @param {{ type?: string | undefined, init?: boolean }} [options] `type`: project type
+ *   chosen by the user; persisted as `gasdev.type` when the project has none.
+ *   `init`: also create the files driven by the project type (not for `check --fix`).
  * @returns {string[]} One message per change.
  * @throws {CheckError} When package.json or the `gasdev` field is unusable or invalid.
  */
-export function initProject(cwd, { type } = {}) {
+export function initProject(cwd, { type, init = false } = {}) {
   const pkg = readPackage(cwd);
   const { preset, gasTest, type: configuredType } = resolveConfig(pkg);
   if (pkg['scripts'] !== undefined && !isRecord(pkg['scripts'])) {
@@ -1058,6 +1095,10 @@ export function initProject(cwd, { type } = {}) {
       join(cwd, 'package.json'),
       JSON.stringify(pkg, null, 2) + '\n',
     );
+  }
+  const projectType = configuredType ?? type;
+  if (init && preset === 'gas' && projectType !== undefined) {
+    files.push(...createTypeFiles(cwd, projectType, gasTest !== undefined));
   }
   return [...files, ...pkgMessages];
 }

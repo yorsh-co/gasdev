@@ -219,7 +219,10 @@ export async function main(argv) {
           }
         }
       }
-      for (const message of initProject(process.cwd(), { type })) {
+      for (const message of initProject(process.cwd(), {
+        type,
+        init: isInit,
+      })) {
         process.stdout.write(`${message}\n`);
       }
     }
