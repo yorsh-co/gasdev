@@ -1,5 +1,11 @@
 // @ts-check
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { legacyKeyMessage } from '../src/legacy-keys.js';
 import { readPeerTypesVersion } from '../src/release/peer-types.js';
@@ -694,6 +700,111 @@ function checkPeerTypesVersion(cwd, pkg) {
   return [];
 }
 
+const DEPLOY_REF =
+  /^(\s*uses:\s*yorsh-co\/gasdev\/\.github\/workflows\/gas-deploy\.yml@)(\S+)([^\n]*)$/;
+
+/**
+ * Reads gasdev's own version.
+ *
+ * @returns {string}
+ */
+function gasdevVersion() {
+  const pkg = readJson(
+    new URL('../package.json', import.meta.url),
+    'gasdev package.json',
+  );
+  return /** @type {string} */ (/** @type {any} */ (pkg).version);
+}
+
+/**
+ * Lists the workflow files of a project and their `gas-deploy.yml` references.
+ * Line endings are kept: lines are split on `\n`, so a `\r` stays in the
+ * trailing part of the match.
+ *
+ * @param {string} cwd Project root.
+ * @returns {{ file: string, path: string, lines: string[], refs: { index: number, match: RegExpMatchArray }[] }[]}
+ */
+function findDeployRefs(cwd) {
+  const dir = join(cwd, '.github', 'workflows');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => /\.ya?ml$/.test(name))
+    .sort()
+    .map((name) => {
+      const path = join(dir, name);
+      const lines = readFileSync(path, 'utf8').split('\n');
+      const refs = lines.flatMap((line, index) => {
+        const match = line.match(DEPLOY_REF);
+        return match ? [{ index, match }] : [];
+      });
+      return { file: `.github/workflows/${name}`, path, lines, refs };
+    })
+    .filter(({ refs }) => refs.length > 0);
+}
+
+/**
+ * Reports `gas-deploy.yml` references that are not pinned to the installed
+ * gasdev version. Skipped in gasdev itself.
+ *
+ * @param {string} cwd Project root.
+ * @param {Record<string, unknown>} pkg The project's package.json.
+ * @returns {Drift[]}
+ */
+function checkDeployWorkflowRef(cwd, pkg) {
+  if (pkg['name'] === 'gasdev') return [];
+  const version = gasdevVersion();
+  return findDeployRefs(cwd).flatMap(({ file, refs }) =>
+    refs.flatMap(({ match }) => {
+      const ref = match[2] ?? '';
+      const semver = /^v(\d+\.\d+\.\d+)$/.exec(ref);
+      if (!semver) {
+        return [
+          {
+            file,
+            message: `uses gas-deploy.yml@${ref}; pin it to v${version}`,
+          },
+        ];
+      }
+      return semver[1] === version
+        ? []
+        : [
+            {
+              file,
+              message: `uses gas-deploy.yml@v${semver[1]}; installed gasdev is ${version}`,
+            },
+          ];
+    }),
+  );
+}
+
+/**
+ * Rewrites the `vX.Y.Z` of `gas-deploy.yml` references to the installed gasdev
+ * version, touching only that text. Other refs (branches, SHAs) are left as
+ * deliberate pins. Skipped in gasdev itself.
+ *
+ * @param {string} cwd Project root.
+ * @param {Record<string, unknown>} pkg The project's package.json.
+ * @returns {string[]} One message per updated reference.
+ */
+function fixDeployWorkflowRef(cwd, pkg) {
+  if (pkg['name'] === 'gasdev') return [];
+  const version = gasdevVersion();
+  return findDeployRefs(cwd).flatMap(({ file, path, lines, refs }) => {
+    const stale = refs.filter(
+      ({ match }) =>
+        /^v\d+\.\d+\.\d+$/.test(match[2] ?? '') && match[2] !== `v${version}`,
+    );
+    if (stale.length === 0) return [];
+    for (const { index, match } of stale) {
+      lines[index] = `${match[1]}v${version}${match[3]}`;
+    }
+    writeFileSync(path, lines.join('\n'));
+    return stale.map(
+      () => `${file}: gas-deploy.yml ref updated to v${version}`,
+    );
+  });
+}
+
 /**
  * Reads package.json from a project.
  *
@@ -735,6 +846,7 @@ export function checkProject(cwd) {
     ...checkDependabot(cwd, preset),
     ...checkScripts(pkg, preset, gasTest),
     ...checkPeerTypesVersion(cwd, pkg),
+    ...checkDeployWorkflowRef(cwd, pkg),
     ...(loadOrder ? checkLoadOrder(cwd, loadOrder) : []),
     ...(loadOrder && html ? checkHtml(cwd, html, loadOrder) : []),
   ];
@@ -799,7 +911,8 @@ function addScripts(cwd, pkg, preset, gasTest) {
 /**
  * Scaffolds or repairs a project, for `init` and `check --fix`: applies the
  * ignore-file fixes, creates `.github/dependabot.yml` when absent, adds the
- * missing required scripts and adds placeholders for missing present-only ones.
+ * missing required scripts, adds placeholders for missing present-only ones and
+ * updates the `gas-deploy.yml@vX.Y.Z` workflow ref to the installed version.
  * Existing files and scripts are never overwritten. The configuration is
  * validated first, as is `scripts`, so an invalid one writes nothing.
  *
@@ -818,6 +931,7 @@ export function initProject(cwd) {
     ...fixIgnoreFile(cwd, preset, '.prettierignore'),
     ...createDependabot(cwd, preset),
     ...addScripts(cwd, pkg, preset, gasTest),
+    ...fixDeployWorkflowRef(cwd, pkg),
   ];
 }
 

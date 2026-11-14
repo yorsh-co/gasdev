@@ -1083,3 +1083,77 @@ describe('check (peer declaration version)', () => {
     expect(readFileSync(join(dir, FILE), 'utf8')).toBe(header('1.1.0'));
   });
 });
+
+describe('check (gas-deploy workflow ref)', () => {
+  const VERSION = JSON.parse(
+    readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
+  ).version;
+  const WF = '.github/workflows/deploy.yml';
+  const workflow = (/** @type {string} */ ref, eol = '\n') =>
+    [
+      'name: Deploy',
+      'jobs:',
+      '  deploy:',
+      `    uses: yorsh-co/gasdev/.github/workflows/gas-deploy.yml@${ref} # pinned`,
+      '    secrets: inherit',
+      '',
+    ].join(eol);
+  const make = (
+    /** @type {string | undefined} */ content,
+    /** @type {Record<string, unknown>} */ extra = {},
+  ) => {
+    const dir = createCleanProject('gas', extra);
+    if (content !== undefined) {
+      mkdirSync(join(dir, '.github', 'workflows'));
+      writeFileSync(join(dir, WF), content);
+    }
+    return dir;
+  };
+
+  it('passes when the ref matches the installed version', () => {
+    expect(run(make(workflow(`v${VERSION}`)), ['check']).status).toBe(0);
+  });
+
+  it('passes without a workflows directory', () => {
+    expect(run(make(undefined), ['check']).status).toBe(0);
+  });
+
+  it('reports an older ref and check --fix rewrites only the version', () => {
+    const dir = make(workflow('v0.0.1'));
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(WF);
+    expect(result.stderr).toContain(
+      `uses gas-deploy.yml@v0.0.1; installed gasdev is ${VERSION}`,
+    );
+    const fixed = run(dir, ['check', '--fix']);
+    expect(fixed.stdout).toContain(
+      `${WF}: gas-deploy.yml ref updated to v${VERSION}`,
+    );
+    expect(fixed.status).toBe(0);
+    expect(readFileSync(join(dir, WF), 'utf8')).toBe(workflow(`v${VERSION}`));
+  });
+
+  it('preserves CRLF line endings when fixing', () => {
+    const dir = make(workflow('v0.0.1', '\r\n'));
+    run(dir, ['check', '--fix']);
+    expect(readFileSync(join(dir, WF), 'utf8')).toBe(
+      workflow(`v${VERSION}`, '\r\n'),
+    );
+  });
+
+  it('reports a branch ref without rewriting it', () => {
+    const dir = make(workflow('main'));
+    const result = run(dir, ['check', '--fix']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `uses gas-deploy.yml@main; pin it to v${VERSION}`,
+    );
+    expect(readFileSync(join(dir, WF), 'utf8')).toBe(workflow('main'));
+  });
+
+  it('skips gasdev itself', () => {
+    const dir = make(workflow('v0.0.1'), { name: 'gasdev' });
+    expect(run(dir, ['check']).stderr).not.toContain('gas-deploy.yml');
+  });
+});

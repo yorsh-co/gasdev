@@ -1,6 +1,7 @@
 # 2. Check --fix for ignore files
 
 - Status: Accepted
+- Amended by: [ADR 0031](0031-deploy-workflow-version.md)
 - Date: 2026-11-03
 
 ## Context
