@@ -382,8 +382,8 @@ export async function runRun(cwd, { keep = false, prompt: givenPrompt } = {}) {
   const code = buildGasTest(cwd, config);
   const bin = claspBin(cwd);
 
-  const spinner = startSpinner(process.stderr, 'Preparing test project...');
   const dir = mkdtempSync(join(tmpdir(), 'gasdev-run-'));
+  const spinner = startSpinner(process.stderr, 'Preparing test project...');
   try {
     await prepareProject(bin, dir, scriptId, scopes, code);
     spinner.update('Pushing test project...');
