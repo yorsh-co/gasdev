@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -1294,6 +1295,18 @@ describe('gasdev.type', () => {
       const dir = emptyProject({ gasdev: { type: 'app' } });
       initProject(dir, { type: 'library' });
       expect(readPackage(dir).gasdev.type).toBe('app');
+      const scripts = readPackage(dir).scripts ?? {};
+      expect(scripts).not.toHaveProperty('release');
+      expect(scripts).not.toHaveProperty('build:release');
+    });
+
+    it('writes nothing when the passed type is invalid', () => {
+      const dir = emptyProject();
+      const before = readdirSync(dir).sort();
+      const pkgBefore = readFileSync(join(dir, 'package.json'), 'utf8');
+      expect(() => initProject(dir, { type: 'bogus' })).toThrow(CheckError);
+      expect(readdirSync(dir).sort()).toEqual(before);
+      expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(pkgBefore);
     });
   });
 
@@ -1466,7 +1479,9 @@ describe('gasdev.type', () => {
       expect(present(dir)).toEqual(expected);
       for (const f of expected) {
         expect(messages).toContain(
-          `${f}: created; set oauthScopes in appsscript.example.json`,
+          f === 'appsscript.example.json'
+            ? `${f}: created; set oauthScopes in ${f}`
+            : `${f}: created`,
         );
       }
     });

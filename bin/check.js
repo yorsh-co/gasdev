@@ -954,7 +954,9 @@ function createDeployTemplates(cwd, type) {
     if (existsSync(path)) continue;
     writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
     messages.push(
-      `${file}: created; set oauthScopes in appsscript.example.json`,
+      file === 'appsscript.example.json'
+        ? `${file}: created; set oauthScopes in ${file}`
+        : `${file}: created`,
     );
   }
   return messages;
@@ -1134,21 +1136,26 @@ export function initProject(cwd, { type, init = false } = {}) {
   if (pkg['overrides'] !== undefined && !isRecord(pkg['overrides'])) {
     throw new CheckError('package.json: overrides must be an object');
   }
+  if (
+    type !== undefined &&
+    configuredType === undefined &&
+    (preset !== 'gas' || !PROJECT_TYPES.includes(type))
+  ) {
+    throw new CheckError(
+      `package.json: cannot set "gasdev.type" to ${JSON.stringify(type)}`,
+    );
+  }
+  const projectType = configuredType ?? type;
   const files = [
     ...fixIgnoreFile(cwd, preset, '.gitignore'),
     ...fixIgnoreFile(cwd, preset, '.prettierignore'),
     ...createDependabot(cwd, preset),
   ];
   const pkgMessages = [
-    ...addScripts(pkg, preset, gasTest, type ?? configuredType),
+    ...addScripts(pkg, preset, gasTest, projectType),
     ...addPackageFields(pkg, preset),
   ];
   if (type !== undefined && configuredType === undefined) {
-    if (preset !== 'gas' || !PROJECT_TYPES.includes(type)) {
-      throw new CheckError(
-        `package.json: cannot set "gasdev.type" to ${JSON.stringify(type)}`,
-      );
-    }
     pkg['gasdev'] = { ...(isRecord(pkg['gasdev']) ? pkg['gasdev'] : {}), type };
     pkgMessages.push(`package.json: set gasdev.type to "${type}"`);
   }
@@ -1158,7 +1165,6 @@ export function initProject(cwd, { type, init = false } = {}) {
       JSON.stringify(pkg, null, 2) + '\n',
     );
   }
-  const projectType = configuredType ?? type;
   if (init && preset === 'gas' && projectType !== undefined) {
     files.push(...createTypeFiles(cwd, projectType, gasTest !== undefined));
     files.push(...createDeployTemplates(cwd, projectType));
