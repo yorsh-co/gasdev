@@ -25,11 +25,13 @@ describe('bin/gasdev.js entry point', () => {
   it('does not run main when imported', async () => {
     process.argv = ['node', 'vitest'];
     const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
     const before = process.exitCode;
 
     await import('../bin/gasdev.js');
 
     expect(stdout).not.toHaveBeenCalled();
+    expect(stderr).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(before);
   });
 
@@ -42,6 +44,7 @@ describe('bin/gasdev.js entry point', () => {
       encoding: 'utf8',
     });
 
+    expect(result.stderr).toBe('');
     expect(result.stdout).toBe(`${pkg.version}\n`);
     expect(result.status).toBe(0);
   });
