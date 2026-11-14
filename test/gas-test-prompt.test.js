@@ -8,7 +8,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GasTestError, runRun } from '../bin/gas-test.js';
+import { runRun } from '../bin/gas-test.js';
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
@@ -152,10 +152,20 @@ describe('gas-test run prompts', () => {
 
   it('throws on a cancelled script ID without invoking clasp', async () => {
     const { prompt } = fakePrompt([{}]);
-    await expect(
-      runRun(createProject(undefined), { prompt }),
-    ).rejects.toBeInstanceOf(GasTestError);
+    await expect(runRun(createProject(undefined), { prompt })).rejects.toThrow(
+      'cancelled',
+    );
     expect(entries()).toEqual([]);
+  });
+
+  it('trims the prompted script ID', async () => {
+    const { prompt } = fakePrompt([
+      { scriptId: '  prompted-id  ' },
+      { spreadsheetId: '' },
+    ]);
+    await runRun(createProject(undefined), { prompt });
+    const clone = entries().find((e) => e.args[0] === 'clone');
+    expect(clone?.args[1]).toBe('prompted-id');
   });
 
   it('throws on a cancelled spreadsheet ID without invoking clasp', async () => {

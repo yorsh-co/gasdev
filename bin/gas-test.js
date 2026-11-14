@@ -343,7 +343,10 @@ export async function runRun(cwd, { keep = false, prompt: givenPrompt } = {}) {
       validate: (/** @type {string} */ v) =>
         /^[A-Za-z0-9_-]+$/.test(v) || 'Enter a valid script ID',
     });
-    scriptId = answer['scriptId'];
+    if (answer['scriptId'] === undefined) {
+      throw new GasTestError('cancelled');
+    }
+    scriptId = String(answer['scriptId']).trim();
   }
   if (!scriptId) {
     throw new GasTestError(

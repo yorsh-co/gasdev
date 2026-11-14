@@ -1797,6 +1797,15 @@ describe('check (gas-deploy workflow ref)', () => {
     expect(result.stderr).not.toContain(`warning: uses gas-deploy.yml@${ref}`);
   });
 
+  it('reports a downgrade when fixing a newer ref', () => {
+    const dir = make(workflow(`v${MAJOR}.999.0`));
+    const result = run(dir, ['check', '--fix']);
+    expect(result.stdout).toContain(
+      `gas-deploy.yml ref downgraded to v${VERSION}`,
+    );
+    expect(readFileSync(join(dir, WF), 'utf8')).toBe(workflow(`v${VERSION}`));
+  });
+
   it('preserves CRLF line endings when fixing', () => {
     const dir = make(workflow('v0.0.1', '\r\n'));
     run(dir, ['check', '--fix']);

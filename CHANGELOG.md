@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+---
+
+## [3.2.0] - 2026-11-14
+
 ### Added
 
 - gasdev's own GitHub Releases are created by `.github/workflows/release.yml` when a stable `vX.Y.Z` tag is pushed, using the matching CHANGELOG section as notes; see [ADR 0028](docs/adr/0028-github-release-workflow.md)
@@ -20,10 +24,13 @@
 - Dev-only: `bin/gasdev.js` runs `main` only when it is the entry point (symlinks resolved), so importing it has no side effects
 - Dev-only: `npm run lint:workflows` validates every file in `.github/workflows`
 - Local `gasdev deploy` without `~/.clasprc.json` now fails before prompting, with a `clasp login` hint; the CI message is unchanged
+- `gasdev check --fix` reports `gas-deploy.yml ref downgraded to vX.Y.Z` when the existing ref is newer than the installed gasdev
 - Dev-only: CLI tests inject `readHead` instead of running `git rev-parse HEAD`
+- Dev-only: `gasdev check` reads its own version from one place (`gasdevVersion`), which now fails clearly when `version` is missing
 
 ### Fixed
 
+- `gasdev gas-test run` throws `cancelled` when the script ID prompt is cancelled, and trims the entered script ID
 - Dev-only: the coverage gate in `npm run check` passes again; no test imports `bin/gasdev.js` in-process, which dropped its subprocess coverage, and the GitHub Actions prompt gate for `gas-test run` moved into `runRun`
 - Dev-only: vitest no longer collects tests from agent worktrees under `.claude/`
 - The gas template `clean` script is now `gasdev clean`, and `gasdev check` warns (not drift) on the legacy `rimraf dist` value; to migrate, change `"clean"` to `"gasdev clean"`, then run `npm uninstall rimraf`; see [ADR 0033](docs/adr/0033-clean-command.md)
