@@ -651,7 +651,7 @@ With `gasTest` configured, `gasdev check` requires these scripts with exactly th
 1. Create a dedicated Apps Script project and link it to a standard Google Cloud project (project settings), which `clasp run` requires.
 2. Install clasp (see [Requirements](#requirements)). `gas-test run` runs the clasp from the project's `node_modules`, not from `PATH`.
 3. Authorize the scopes: `npx clasp login --extra-scopes <comma-separated gasTest.scopes>`.
-4. Set `GAS_TEST_SCRIPT_ID` (or `gasTest.scriptId`) and, optionally, `GAS_TEST_SPREADSHEET_ID`.
+4. Set `GAS_TEST_SCRIPT_ID` (or `gasTest.scriptId`) and, optionally, `GAS_TEST_SPREADSHEET_ID`. On a terminal, `gas-test run` asks for a missing script ID and for the spreadsheet ID; answers are not saved.
 
 #### Running from the editor
 

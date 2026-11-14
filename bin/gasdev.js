@@ -202,7 +202,17 @@ export async function main(argv) {
       return runPeers(process.cwd(), peers, { check: values.check === true });
     }
     if (isBuild) return runBuild(process.cwd(), { out: values.out });
-    if (isRun) return runRun(process.cwd(), { keep: values.keep === true });
+    if (isRun) {
+      return await runRun(process.cwd(), {
+        keep: values.keep === true,
+        prompt:
+          process.stdin.isTTY &&
+          process.stdout.isTTY &&
+          process.env.GITHUB_ACTIONS !== 'true'
+            ? prompts
+            : undefined,
+      });
+    }
     const fixed = isInit || values.fix === true;
     if (fixed) {
       /** @type {string | undefined} */
