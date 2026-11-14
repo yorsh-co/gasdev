@@ -26,6 +26,9 @@
 - Dev-only: the coverage gate in `npm run check` passes again; no test imports `bin/gasdev.js` in-process, which dropped its subprocess coverage, and the GitHub Actions prompt gate for `gas-test run` moved into `runRun`
 - Dev-only: vitest no longer collects tests from agent worktrees under `.claude/`
 - The gas template `clean` script is now `gasdev clean`, and `gasdev check` warns (not drift) on the legacy `rimraf dist` value; to migrate, change `"clean"` to `"gasdev clean"`, then run `npm uninstall rimraf`; see [ADR 0033](docs/adr/0033-clean-command.md)
+- `eslint` peer floor raised to `^10.15.0`; this is non-breaking, since npm upgrades within an existing `^10` range, and only an exact pin below 10.15.0 needs moving
+- `typescript-eslint` floor raised to `^8.72.2`
+- Upstream advisories: the `typescript-eslint` `minimatch` finding (`overrides.minimatch` stays required) and the `@google/clasp` → `zod` finding wait on upstream releases
 
 ---
 

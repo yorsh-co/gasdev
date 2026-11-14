@@ -114,7 +114,7 @@ The connection is metadata: `loadOrder` in gas-lock's `gasdev` key becomes `gasL
 
 - Node.js ^22.15.0, ^24.0.0 or >=26.0.0
 - Peer dependencies, which stay direct dev dependencies of your project so their binaries are linked:
-  - `eslint` `^10.7.0`
+  - `eslint` `^10.15.0`
   - `prettier` `^3.9.6`
   - `typescript` `^5.9.3`
   - `@google/clasp` `^3.4.1`, optional: needed by `gasdev gas-test run`, `gasdev setup` and `gasdev deploy`
@@ -130,8 +130,9 @@ Add it to your project's `package.json` as a dev dependency, using a semver rang
 ```json
 {
   "devDependencies": {
-    "gasdev": "github:yorsh-co/gasdev#semver:^3.0.0",
-    "eslint": "^10.7.0",
+    "gasdev": "github:yorsh-co/gasdev#semver:^3.2.0",
+    "eslint": "^10.15.0",
+    "vitest": "^5.1.0",
     "prettier": "^3.9.6",
     "typescript": "^5.9.3",
     "@types/google-apps-script": "^2.0.13",
@@ -141,6 +142,11 @@ Add it to your project's `package.json` as a dev dependency, using a semver rang
 ```
 
 `@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` are dependencies of `gasdev`, so a new project does not add them to its own `devDependencies`.
+
+### Known audit findings
+
+- `typescript-eslint` 8.72.2 and earlier still depend on `minimatch` 10, which has advisory GHSA-g3hv-75wg-m249. The `overrides.minimatch` entry that `gasdev check` requires stays until a stable release moves to `minimatch` 11.
+- `@google/clasp` 3.4.1 (the latest release) depends on `zod` 3, so a `zod` finding remains. It waits on a Google release, and the clasp peer floor goes up once one ships. No override is added for it (accepted risk, see [ADR 0005](docs/adr/0005-audit-overrides.md)).
 
 ### Quick start
 
