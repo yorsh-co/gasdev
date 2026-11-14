@@ -354,6 +354,10 @@ export async function runRun(cwd, { keep = false, prompt } = {}) {
       name: 'spreadsheetId',
       message:
         'Test spreadsheet ID (empty: use the GAS_TEST_SPREADSHEET_ID Script Property)',
+      validate: (/** @type {string} */ v) =>
+        v === '' ||
+        /^[A-Za-z0-9_-]+$/.test(v) ||
+        'Enter a valid spreadsheet ID or leave empty',
     });
     if (answer['spreadsheetId'] === undefined) {
       throw new GasTestError('cancelled');

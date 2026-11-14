@@ -171,4 +171,17 @@ describe('gas-test run prompts', () => {
       'no script ID: set GAS_TEST_SCRIPT_ID or "gasdev.gasTest.scriptId"',
     );
   });
+
+  it('validates the spreadsheet ID answer', async () => {
+    const { prompt, calls } = fakePrompt([{ spreadsheetId: '' }]);
+    await runRun(createProject('config-script'), { prompt });
+    const { validate } = /** @type {{ validate: (v: string) => unknown }} */ (
+      calls[0]
+    );
+    expect(validate('bad id!')).toBe(
+      'Enter a valid spreadsheet ID or leave empty',
+    );
+    expect(validate('')).toBe(true);
+    expect(validate('1aB-_c')).toBe(true);
+  });
 });
