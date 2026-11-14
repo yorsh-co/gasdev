@@ -26,6 +26,7 @@
 - Local `gasdev deploy` without `~/.clasprc.json` now fails before prompting, with a `clasp login` hint; the CI message is unchanged
 - `gasdev check --fix` reports `gas-deploy.yml ref downgraded to vX.Y.Z` when the existing ref is newer than the installed gasdev
 - Dev-only: CLI tests inject `readHead` instead of running `git rev-parse HEAD`
+- Dev-only: `gasdev check` reads its own version from one place (`gasdevVersion`), which now fails clearly when `version` is missing
 
 ### Fixed
 
