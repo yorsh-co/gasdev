@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The `gasdev gas-test run` spreadsheet ID prompt now says it is optional and how to skip it (press Enter); the README documents the fallback chain
+
 ---
 
 ## [3.2.0] - 2026-11-14
