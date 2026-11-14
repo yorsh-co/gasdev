@@ -7,6 +7,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
+import semver from 'semver';
 import { legacyKeyMessage } from '../src/legacy-keys.js';
 import { readPeerTypesVersion } from '../src/release/peer-types.js';
 import { HtmlError, compareModule } from './html.js';
@@ -701,7 +702,17 @@ function checkPeerTypesVersion(cwd, pkg) {
 }
 
 const DEPLOY_REF =
-  /^(\s*uses:\s*yorsh-co\/gasdev\/\.github\/workflows\/gas-deploy\.yml@)(\S+)([^\n]*)$/;
+  /^(\s*uses:\s*['"]?yorsh-co\/gasdev\/\.github\/workflows\/gas-deploy\.yml@)([^\s'"]+)([^\n]*)$/;
+
+/**
+ * Extracts the version of a `vX.Y.Z` (or prerelease) ref.
+ *
+ * @param {string} ref Ref after `@`.
+ * @returns {string | null} The version without `v`, or null for other refs.
+ */
+function refVersion(ref) {
+  return ref.startsWith('v') ? semver.valid(ref.slice(1)) : null;
+}
 
 /**
  * Reads gasdev's own version.
@@ -756,8 +767,8 @@ function checkDeployWorkflowRef(cwd, pkg) {
   return findDeployRefs(cwd).flatMap(({ file, refs }) =>
     refs.flatMap(({ match }) => {
       const ref = match[2] ?? '';
-      const semver = /^v(\d+\.\d+\.\d+)$/.exec(ref);
-      if (!semver) {
+      const refVer = refVersion(ref);
+      if (!refVer) {
         return [
           {
             file,
@@ -765,12 +776,12 @@ function checkDeployWorkflowRef(cwd, pkg) {
           },
         ];
       }
-      return semver[1] === version
+      return refVer === version
         ? []
         : [
             {
               file,
-              message: `uses gas-deploy.yml@v${semver[1]}; installed gasdev is ${version}`,
+              message: `uses gas-deploy.yml@${ref}; installed gasdev is ${version}`,
             },
           ];
     }),
@@ -792,7 +803,7 @@ function fixDeployWorkflowRef(cwd, pkg) {
   return findDeployRefs(cwd).flatMap(({ file, path, lines, refs }) => {
     const stale = refs.filter(
       ({ match }) =>
-        /^v\d+\.\d+\.\d+$/.test(match[2] ?? '') && match[2] !== `v${version}`,
+        refVersion(match[2] ?? '') !== null && match[2] !== `v${version}`,
     );
     if (stale.length === 0) return [];
     for (const { index, match } of stale) {

@@ -1153,7 +1153,61 @@ describe('check (gas-deploy workflow ref)', () => {
   });
 
   it('skips gasdev itself', () => {
-    const dir = make(workflow('v0.0.1'), { name: 'gasdev' });
-    expect(run(dir, ['check']).stderr).not.toContain('gas-deploy.yml');
+    const dir = make(workflow('v0.0.1'));
+    const pkg = readPackage(dir);
+    writePackage(dir, {
+      ...pkg,
+      name: 'gasdev',
+      scripts: {
+        ...pkg['scripts'],
+        check:
+          'npm run format:check && npm run lint && npm run typecheck && npm run test:coverage && node bin/gasdev.js check',
+        'test:coverage': 'true',
+      },
+    });
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain('gas-deploy.yml');
+    run(dir, ['check', '--fix']);
+    expect(readFileSync(join(dir, WF), 'utf8')).toBe(workflow('v0.0.1'));
+  });
+
+  it('treats a prerelease ref as a version ref', () => {
+    const dir = make(workflow('v0.0.1-beta.1'));
+    const result = run(dir, ['check']);
+    expect(result.stderr).toContain(
+      `uses gas-deploy.yml@v0.0.1-beta.1; installed gasdev is ${VERSION}`,
+    );
+    run(dir, ['check', '--fix']);
+    expect(readFileSync(join(dir, WF), 'utf8')).toBe(workflow(`v${VERSION}`));
+    expect(run(dir, ['check']).status).toBe(0);
+  });
+
+  it('reports and fixes a quoted ref keeping the quotes', () => {
+    const quoted = (/** @type {string} */ ref) =>
+      workflow(ref)
+        .replace(/@(\S+) #/, `@$1" #`)
+        .replace('uses: ', 'uses: "');
+    const dir = make(quoted('v0.0.1'));
+    expect(run(dir, ['check']).stderr).toContain(
+      `uses gas-deploy.yml@v0.0.1; installed gasdev is ${VERSION}`,
+    );
+    run(dir, ['check', '--fix']);
+    expect(readFileSync(join(dir, WF), 'utf8')).toBe(quoted(`v${VERSION}`));
+  });
+
+  it('handles .yaml files with several stale refs', () => {
+    const dir = make(undefined);
+    mkdirSync(join(dir, '.github', 'workflows'));
+    const file = join(dir, '.github', 'workflows', 'ci.yaml');
+    const job = (/** @type {string} */ n, /** @type {string} */ ref) =>
+      `  ${n}:\n    uses: yorsh-co/gasdev/.github/workflows/gas-deploy.yml@${ref}\n`;
+    writeFileSync(file, `jobs:\n${job('a', 'v0.0.1')}${job('b', 'v0.0.2')}`);
+    const result = run(dir, ['check']);
+    expect(result.stderr.match(/installed gasdev is/g)).toHaveLength(2);
+    run(dir, ['check', '--fix']);
+    expect(readFileSync(file, 'utf8')).toBe(
+      `jobs:\n${job('a', `v${VERSION}`)}${job('b', `v${VERSION}`)}`,
+    );
   });
 });
