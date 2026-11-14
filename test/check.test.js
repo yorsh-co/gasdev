@@ -1776,6 +1776,19 @@ describe('check (gas-deploy workflow ref)', () => {
     expect(readFileSync(join(dir, WF), 'utf8')).toBe(workflow(`v${VERSION}`));
   });
 
+  it.skipIf(semver.minor(VERSION) === 0 && semver.patch(VERSION) === 0)(
+    'warns on an older stable ref in the same major',
+    () => {
+      const ref = `v${MAJOR}.0.0`;
+      const result = run(make(workflow(ref)), ['check']);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(
+        `warning: uses gas-deploy.yml@${ref}; installed gasdev is ${VERSION}`,
+      );
+      expect(result.stdout).toContain('with 1 warning(s)');
+    },
+  );
+
   it('fails on a newer ref in the same major', () => {
     const ref = `v${MAJOR}.999.0`;
     const result = run(make(workflow(ref)), ['check']);
