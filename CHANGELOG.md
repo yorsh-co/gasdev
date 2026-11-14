@@ -15,10 +15,15 @@
 
 ### Changed
 
-- Dev-only: `bin/gasdev.js` runs `main` only when it is the entry point (symlinks resolved), so tests can import it without side effects
+- Dev-only: `bin/gasdev.js` runs `main` only when it is the entry point (symlinks resolved), so importing it has no side effects
 - Dev-only: `npm run lint:workflows` validates every file in `.github/workflows`
 - Local `gasdev deploy` without `~/.clasprc.json` now fails before prompting, with a `clasp login` hint; the CI message is unchanged
 - Dev-only: CLI tests inject `readHead` instead of running `git rev-parse HEAD`
+
+### Fixed
+
+- Dev-only: the coverage gate in `npm run check` passes again; no test imports `bin/gasdev.js` in-process, which dropped its subprocess coverage, and the GitHub Actions prompt gate for `gas-test run` moved into `runRun`
+- Dev-only: vitest no longer collects tests from agent worktrees under `.claude/`
 
 ---
 

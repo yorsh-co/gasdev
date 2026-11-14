@@ -320,10 +320,13 @@ function formatResults(results, elapsedMs) {
  * @param {{ keep?: boolean, prompt?: ((question: import('prompts').PromptObject) => Promise<Record<string, any>>) | undefined }} options
  *   `keep` leaves the temporary project in place. `prompt` is a `prompts`-compatible
  *   function that asks for a missing script ID and the spreadsheet ID; answers apply to this run only.
+ *   It is ignored on GitHub Actions.
  * @returns {Promise<number>} 1 when a test failed or no results came back, else 0.
  * @throws {GasTestError} On an unusable project, a cancelled prompt or a clasp failure.
  */
-export async function runRun(cwd, { keep = false, prompt } = {}) {
+export async function runRun(cwd, { keep = false, prompt: givenPrompt } = {}) {
+  const prompt =
+    process.env['GITHUB_ACTIONS'] === 'true' ? undefined : givenPrompt;
   const config = loadConfig(cwd);
   if (!config.gasTest) {
     throw new GasTestError(

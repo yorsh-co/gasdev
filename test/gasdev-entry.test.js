@@ -3,36 +3,37 @@ import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import pkg from '../package.json' with { type: 'json' };
 
-const BIN = fileURLToPath(new URL('../bin/gasdev.js', import.meta.url));
+const BIN_URL = new URL('../bin/gasdev.js', import.meta.url);
+const BIN = fileURLToPath(BIN_URL);
 
+// Both cases spawn node: importing bin/gasdev.js in the test process breaks
+// the merge of its subprocess coverage.
 describe('bin/gasdev.js entry point', () => {
-  const argv = process.argv;
-  const exitCode = process.exitCode;
   /** @type {string | undefined} */
   let dir;
 
   afterEach(() => {
-    process.argv = argv;
-    process.exitCode = exitCode;
-    vi.restoreAllMocks();
     if (dir) rmSync(dir, { recursive: true, force: true });
     dir = undefined;
   });
 
-  it('does not run main when imported', async () => {
-    process.argv = ['node', 'vitest'];
-    const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
-    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
-    const before = process.exitCode;
+  it('does not run main when imported', () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `await import(${JSON.stringify(BIN_URL.href)});`,
+      ],
+      { encoding: 'utf8' },
+    );
 
-    await import('../bin/gasdev.js');
-
-    expect(stdout).not.toHaveBeenCalled();
-    expect(stderr).not.toHaveBeenCalled();
-    expect(process.exitCode).toBe(before);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toBe('');
+    expect(result.status).toBe(0);
   });
 
   it('runs main when launched through a symlink', () => {

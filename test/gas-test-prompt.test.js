@@ -172,6 +172,16 @@ describe('gas-test run prompts', () => {
     );
   });
 
+  it('does not prompt on GitHub Actions and keeps the no-script-ID error', async () => {
+    vi.stubEnv('GITHUB_ACTIONS', 'true');
+    const { prompt, calls } = fakePrompt([{ scriptId: 'prompted-id' }]);
+    await expect(runRun(createProject(undefined), { prompt })).rejects.toThrow(
+      'no script ID: set GAS_TEST_SCRIPT_ID or "gasdev.gasTest.scriptId"',
+    );
+    expect(calls).toEqual([]);
+    expect(entries()).toEqual([]);
+  });
+
   it('validates the spreadsheet ID answer', async () => {
     const { prompt, calls } = fakePrompt([{ spreadsheetId: '' }]);
     await runRun(createProject('config-script'), { prompt });
