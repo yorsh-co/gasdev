@@ -1,0 +1,7 @@
+{
+  "extends": "gasdev/tsconfig/test.json",
+  "compilerOptions": {
+    "rootDir": "."
+  },
+  "include": ["test/**/*.ts"]
+}

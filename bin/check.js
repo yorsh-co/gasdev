@@ -2,13 +2,16 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import semver from 'semver';
+import { templateDefaults } from '../src/ci/manifest-defaults.js';
 import { legacyKeyMessage } from '../src/legacy-keys.js';
 import { readPeerTypesVersion } from '../src/release/peer-types.js';
 import { HtmlError, compareModule } from './html.js';
 
 const PRESETS = ['gas', 'node'];
+const PROJECT_TYPES = ['library', 'app', 'webapp'];
 const KNOWN_KEYS = [
   'preset',
+  'type',
   'loadOrder',
   'peers',
   'gasTest',
@@ -88,6 +91,7 @@ const SELF_TEST = 'npm run test:coverage';
 /**
  * @typedef {object} ScriptsTemplate
  * @property {Record<string, string>} required Scripts that must have exactly this value.
+ * @property {Record<string, string>} [library] Scripts required, with exactly this value, for `library` projects and projects without a type.
  * @property {string[]} present Scripts that must exist with any value.
  * @property {Record<string, string>} [gasTest] Scripts required, with exactly this value, when `gasTest` is configured.
  */
@@ -108,6 +112,7 @@ const SELF_TEST = 'npm run test:coverage';
 /**
  * @typedef {object} ResolvedConfig
  * @property {string} preset Preset name; `gas` when unset.
+ * @property {string | undefined} [type] Project type (`library`, `app` or `webapp`); undefined when unset.
  * @property {string[] | undefined} loadOrder Source files under `src/` in load order.
  * @property {Record<string, string> | undefined} peers Optional sibling libraries and their version ranges.
  * @property {GasTestConfig | undefined} gasTest Settings for tests that run in Apps Script.
@@ -417,7 +422,16 @@ function resolveConfig(pkg) {
       `package.json: unknown preset ${JSON.stringify(preset)} (expected: ${PRESETS.join(', ')})`,
     );
   }
-  for (const key of ['loadOrder', 'peers', 'gasTest', 'html']) {
+  const type = config['type'];
+  if (
+    type !== undefined &&
+    (typeof type !== 'string' || !PROJECT_TYPES.includes(type))
+  ) {
+    throw new CheckError(
+      `package.json: unknown type ${JSON.stringify(type)} (expected: ${PROJECT_TYPES.join(', ')})`,
+    );
+  }
+  for (const key of ['type', 'loadOrder', 'peers', 'gasTest', 'html']) {
     if (config[key] !== undefined && preset !== 'gas') {
       throw new CheckError(
         `package.json: "gasdev.${key}" requires the gas preset`,
@@ -436,6 +450,7 @@ function resolveConfig(pkg) {
   }
   return {
     preset,
+    type,
     loadOrder:
       config['loadOrder'] === undefined
         ? undefined
@@ -555,9 +570,10 @@ function checkDependabot(cwd, preset) {
  * @param {Record<string, unknown>} pkg
  * @param {string} preset
  * @param {GasTestConfig | undefined} gasTest Configured `gasTest` settings, if any.
+ * @param {string | undefined} type Project type, if set.
  * @returns {Drift[]}
  */
-function checkScripts(pkg, preset, gasTest) {
+function checkScripts(pkg, preset, gasTest, type) {
   const file = 'package.json';
   const template = /** @type {ScriptsTemplate} */ (
     readJson(new URL(`${preset}/scripts.json`, TEMPLATES), 'scripts template')
@@ -566,7 +582,11 @@ function checkScripts(pkg, preset, gasTest) {
   const isSelf = pkg['name'] === 'gasdev';
   /** @type {Drift[]} */
   const drift = [];
-  const required = { ...template.required, ...(gasTest && template.gasTest) };
+  const required = {
+    ...template.required,
+    ...((type === undefined || type === 'library') && template.library),
+    ...(gasTest && template.gasTest),
+  };
   for (const [name, wanted] of Object.entries(required)) {
     // The `npm run test &&` rewrite matches the template's `check` wording literally. If that
     // changes, test/check.test.js "requires the coverage gate in this package itself" fails.
@@ -852,12 +872,12 @@ export function loadConfig(cwd) {
  */
 export function checkProject(cwd) {
   const pkg = readPackage(cwd);
-  const { preset, loadOrder, gasTest, html } = resolveConfig(pkg);
+  const { preset, loadOrder, gasTest, html, type } = resolveConfig(pkg);
   const drift = [
     ...checkIgnoreFile(cwd, preset, '.gitignore'),
     ...checkIgnoreFile(cwd, preset, '.prettierignore'),
     ...checkDependabot(cwd, preset),
-    ...checkScripts(pkg, preset, gasTest),
+    ...checkScripts(pkg, preset, gasTest, type),
     ...checkPackageFields(pkg, preset),
     ...checkPeerTypesVersion(cwd, pkg),
     ...(loadOrder ? checkLoadOrder(cwd, loadOrder) : []),
@@ -883,6 +903,94 @@ function createDependabot(cwd, preset) {
 }
 
 /**
+ * Creates the tsconfig and ESLint files for a project type, each only when absent.
+ *
+ * @param {string} cwd
+ * @param {string} type One of `library`, `app` or `webapp`.
+ * @param {boolean} gasTest Whether `gasdev.gasTest` is configured.
+ * @returns {string[]} One message per file created.
+ */
+function createTypeFiles(cwd, type, gasTest) {
+  /** @type {[string, string][]} Target file and its template under `gas/files`. */
+  const files = [
+    ['tsconfig.json', 'tsconfig.json'],
+    ['tsconfig.test.json', 'tsconfig.test.json'],
+    [
+      'eslint.config.js',
+      type === 'webapp' ? 'eslint.webapp.config.js' : 'eslint.config.js',
+    ],
+  ];
+  if (gasTest) files.push(['gas-test/tsconfig.json', 'gas-test/tsconfig.json']);
+  if (type === 'webapp') {
+    files.push(['tsconfig.frontend.json', 'tsconfig.frontend.json']);
+  }
+  const messages = [];
+  for (const [file, template] of files) {
+    const path = join(cwd, file);
+    if (existsSync(path)) continue;
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      readFileSync(new URL(`gas/files/${template}`, TEMPLATES)),
+    );
+    messages.push(`${file}: created`);
+  }
+  return messages;
+}
+
+/**
+ * Creates the clasp and manifest templates of a deployed project (`app` or
+ * `webapp`), each only when absent.
+ *
+ * @param {string} cwd
+ * @param {string} type One of `library`, `app` or `webapp`.
+ * @returns {string[]} One message per file created.
+ */
+function createDeployTemplates(cwd, type) {
+  if (type === 'library') return [];
+  const messages = [];
+  for (const [file, value] of Object.entries(templateDefaults(type))) {
+    const path = join(cwd, file);
+    if (existsSync(path)) continue;
+    writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+    messages.push(
+      file === 'appsscript.example.json'
+        ? `${file}: created; set oauthScopes in ${file}`
+        : `${file}: created`,
+    );
+  }
+  return messages;
+}
+
+/**
+ * Creates the CI deploy workflow of a deployed project (`app` or `webapp`)
+ * when absent, pinned to gasdev's own version.
+ *
+ * @param {string} cwd
+ * @param {string} type One of `library`, `app` or `webapp`.
+ * @returns {string[]} One message per file created.
+ */
+function createDeployWorkflow(cwd, type) {
+  const file = '.github/workflows/deploy.yml';
+  const path = join(cwd, file);
+  if (type === 'library' || existsSync(path)) return [];
+  const pkg = readJson(GASDEV_PACKAGE, 'gasdev package.json');
+  const version = isRecord(pkg) ? pkg['version'] : undefined;
+  const template = readFileSync(
+    new URL('gas/files/.github/workflows/deploy.yml', TEMPLATES),
+    'utf8',
+  );
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(
+    path,
+    template.replaceAll('{{GASDEV_VERSION}}', String(version)),
+  );
+  return [
+    `${file}: created; add the dev and live environments (see "CI deployment" in the README)`,
+  ];
+}
+
+/**
  * Adds the required scripts missing from package.json, then a placeholder for
  * each missing script that must only be present, after the existing ones.
  * Existing scripts are never changed. Mutates `pkg`; the caller writes it.
@@ -890,13 +998,18 @@ function createDependabot(cwd, preset) {
  * @param {Record<string, unknown>} pkg Parsed package.json.
  * @param {string} preset
  * @param {GasTestConfig | undefined} gasTest Configured `gasTest` settings, if any.
+ * @param {string | undefined} type Project type, if set.
  * @returns {string[]} One message per added script.
  */
-function addScripts(pkg, preset, gasTest) {
+function addScripts(pkg, preset, gasTest, type) {
   const template = /** @type {ScriptsTemplate} */ (
     readJson(new URL(`${preset}/scripts.json`, TEMPLATES), 'scripts template')
   );
-  const required = { ...template.required, ...(gasTest && template.gasTest) };
+  const required = {
+    ...template.required,
+    ...((type === undefined || type === 'library') && template.library),
+    ...(gasTest && template.gasTest),
+  };
   const scripts = isRecord(pkg['scripts']) ? pkg['scripts'] : {};
   const missing = Object.entries(required).filter(
     ([name]) => scripts[name] === undefined,
@@ -959,6 +1072,44 @@ function addPackageFields(pkg, preset) {
 }
 
 /**
+ * Asks which kind of project this is.
+ *
+ * @param {(question: import('prompts').PromptObject) => Promise<Record<string, any>>} prompt A `prompts`-compatible function.
+ * @returns {Promise<string>} One of `library`, `app` or `webapp`.
+ * @throws {CheckError} When the prompt is cancelled.
+ */
+export async function chooseProjectType(prompt) {
+  const { type } = await prompt({
+    type: 'select',
+    name: 'type',
+    message: 'Project type',
+    choices: [
+      {
+        title: 'library',
+        description:
+          'consumed by other Apps Script projects; released with gasdev release',
+        value: 'library',
+      },
+      {
+        title: 'app',
+        description:
+          'a deployed Apps Script project (Sheets, Forms, Gmail, triggers, webhooks)',
+        value: 'app',
+      },
+      {
+        title: 'webapp',
+        description: 'an app that is also redeployed as a web app',
+        value: 'webapp',
+      },
+    ],
+  });
+  if (type === undefined) {
+    throw new CheckError('init cancelled');
+  }
+  return type;
+}
+
+/**
  * Scaffolds or repairs a project, for `init` and `check --fix`: applies the
  * ignore-file fixes, creates `.github/dependabot.yml` when absent, adds the
  * missing required scripts and adds placeholders for missing present-only ones.
@@ -967,12 +1118,15 @@ function addPackageFields(pkg, preset) {
  * nothing. package.json is written once, and only when it changed.
  *
  * @param {string} cwd Project root.
+ * @param {{ type?: string | undefined, init?: boolean }} [options] `type`: project type
+ *   chosen by the user; persisted as `gasdev.type` when the project has none.
+ *   `init`: also create the files driven by the project type (not for `check --fix`).
  * @returns {string[]} One message per change.
  * @throws {CheckError} When package.json or the `gasdev` field is unusable or invalid.
  */
-export function initProject(cwd) {
+export function initProject(cwd, { type, init = false } = {}) {
   const pkg = readPackage(cwd);
-  const { preset, gasTest } = resolveConfig(pkg);
+  const { preset, gasTest, type: configuredType } = resolveConfig(pkg);
   if (pkg['scripts'] !== undefined && !isRecord(pkg['scripts'])) {
     throw new CheckError('package.json: scripts must be an object');
   }
@@ -982,20 +1136,39 @@ export function initProject(cwd) {
   if (pkg['overrides'] !== undefined && !isRecord(pkg['overrides'])) {
     throw new CheckError('package.json: overrides must be an object');
   }
+  if (
+    type !== undefined &&
+    configuredType === undefined &&
+    (preset !== 'gas' || !PROJECT_TYPES.includes(type))
+  ) {
+    throw new CheckError(
+      `package.json: cannot set "gasdev.type" to ${JSON.stringify(type)}`,
+    );
+  }
+  const projectType = configuredType ?? type;
   const files = [
     ...fixIgnoreFile(cwd, preset, '.gitignore'),
     ...fixIgnoreFile(cwd, preset, '.prettierignore'),
     ...createDependabot(cwd, preset),
   ];
   const pkgMessages = [
-    ...addScripts(pkg, preset, gasTest),
+    ...addScripts(pkg, preset, gasTest, projectType),
     ...addPackageFields(pkg, preset),
   ];
+  if (type !== undefined && configuredType === undefined) {
+    pkg['gasdev'] = { ...(isRecord(pkg['gasdev']) ? pkg['gasdev'] : {}), type };
+    pkgMessages.push(`package.json: set gasdev.type to "${type}"`);
+  }
   if (pkgMessages.length > 0) {
     writeFileSync(
       join(cwd, 'package.json'),
       JSON.stringify(pkg, null, 2) + '\n',
     );
+  }
+  if (init && preset === 'gas' && projectType !== undefined) {
+    files.push(...createTypeFiles(cwd, projectType, gasTest !== undefined));
+    files.push(...createDeployTemplates(cwd, projectType));
+    files.push(...createDeployWorkflow(cwd, projectType));
   }
   return [...files, ...pkgMessages];
 }

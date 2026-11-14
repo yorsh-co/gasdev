@@ -1,0 +1,17 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    uses: yorsh-co/gasdev/.github/workflows/gas-deploy.yml@v{{GASDEV_VERSION}}
+    with:
+      environment: ${{ github.ref_name == 'main' && 'live' || 'dev' }}
+    secrets: inherit

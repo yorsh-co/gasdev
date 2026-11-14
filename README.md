@@ -104,6 +104,7 @@ The connection is metadata: `loadOrder` in gas-lock's `gasdev` key becomes `gasL
 - **Git-flow release branch**: the `release/X.Y.Z` branch where a version is prepared before it is merged and tagged. It is not the dist branch.
 - **Drift**: a difference between your project and the template that `gasdev check` compares it with.
 - **Preset**: the project type in `gasdev.preset`: `gas` (the default) for Apps Script TypeScript projects, or `node` for plain JavaScript Node tooling. It selects the templates and the keys that `gasdev check` accepts.
+- **Project type**: `gasdev.type` (gas preset only, optional): `library` (consumed by other Apps Script projects, released with `gasdev release`), `app` (a deployed Apps Script project) or `webapp` (an `app` also redeployed as a web app). `gasdev init` prompts for it when unset and persists it; `check` validates it.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -146,9 +147,9 @@ Add it to your project's `package.json` as a dev dependency, using a semver rang
 For a new project:
 
 1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) as dev dependencies (see [Requirements](#requirements) and [Install](#install)), then run `npm install`.
-2. For plain JavaScript tooling, set `"gasdev": { "preset": "node" }` in `package.json`.
+2. For plain JavaScript tooling, set `"gasdev": { "preset": "node" }` in `package.json`. For an Apps Script project, optionally set `"gasdev": { "type": "library" }` (or `"app"`, `"webapp"`); `init` asks for it in a terminal when it is unset and saves the answer. Without a terminal it prints a note and skips the type-driven setup.
 3. Run `npx gasdev init` to create the ignore files, `.github/dependabot.yml`, the missing `package.json` fields (`type`, `prettier`, `engines.node`, `overrides`), the missing required scripts and placeholders for `build`, `build:watch` and `typecheck`.
-4. Add the config `init` does not create: [Prettier](#prettier), [TypeScript](#typescript) and [ESLint](#eslint). Replace the `build`, `build:watch` and `typecheck` placeholders with the project's commands, and add `rimraf` as a dev dependency for the `clean` script.
+4. When the type is known, `init` also creates `tsconfig.json`, `tsconfig.test.json` and `eslint.config.js` (plus `gas-test/tsconfig.json` when `gasdev.gasTest` is configured, and `tsconfig.frontend.json` with a `web` ESLint block for `webapp`), each only when absent; see [TypeScript](#typescript) and [ESLint](#eslint) to adjust them. `check --fix` does not create them. Replace the `build`, `build:watch` and `typecheck` placeholders with the project's commands, and add `rimraf` as a dev dependency for the `clean` script.
 5. Run `npm install` again to install the dependencies you added in step 4 (including `rimraf`), then `npm run check`.
 
 For an existing project, follow [Migrating an existing project](#migrating-an-existing-project).
@@ -418,7 +419,7 @@ Required lines per preset:
 | `.gitignore`      | `node_modules/`, `dist/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` | `node_modules/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` |
 | `.prettierignore` | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`                       | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`              |
 
-Required scripts, exact values, for the `gas` preset. They assume `rimraf` is a dev dependency of the project:
+Required scripts, exact values, for the `gas` preset. They assume `rimraf` is a dev dependency of the project. `release` and `build:release` are required for `library` projects (or when `gasdev.type` is unset) only:
 
 | Script          | Value                                                                                       |
 | --------------- | ------------------------------------------------------------------------------------------- |
@@ -1213,7 +1214,7 @@ Enable the [Apps Script API](https://script.google.com/home/usersettings) for th
 
 #### 2. Commit the clasp and manifest templates
 
-Commit `.clasp.example.json` and `appsscript.example.json` at the project root. If either is missing, `gasdev setup` offers to create it with defaults (`{ "rootDir": "dist" }` and a V8 manifest with `STACKDRIVER` exception logging and empty `oauthScopes`, without a `webapp` block); review the files (`rootDir`, `oauthScopes`, the `webapp` block) and commit them. `gasdev deploy` still requires both and never creates them. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
+Commit `.clasp.example.json` and `appsscript.example.json` at the project root. `gasdev init` creates both for `app` and `webapp` projects (not `library`); declare the scopes in `appsscript.example.json` `oauthScopes`. A `webapp` manifest also gets a `webapp` block with `executeAs: USER_DEPLOYING` and `access: MYSELF`; widen it deliberately. If either is missing, `gasdev setup` offers to create it with defaults (`{ "rootDir": "dist" }` and a V8 manifest with `STACKDRIVER` exception logging and empty `oauthScopes`; the `webapp` block is omitted unless `gasdev.type` is `webapp`); review the files (`rootDir`, `oauthScopes`, the `webapp` block) and commit them. `gasdev deploy` still requires both and never creates them. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
 
 ```json
 { "rootDir": "dist" }
@@ -1241,7 +1242,7 @@ Manually in the editor:
 
 `deploy:setup` writes the IDs to `.env` and has no per-environment option, so record them before running it again for the next environment.
 
-Libraries and bound scripts need only the script ID; see [Project types](#project-types). Use a separate script per environment.
+`library` and `app` projects (including bound scripts) need only the script ID; see [Project types](#project-types). Use a separate script per environment.
 
 #### 5. Create the GitHub environment restricted to its branch
 
@@ -1452,6 +1453,10 @@ jobs:
 
 `develop` deploys to the `dev` environment and `main` to `live`. `secrets: inherit` is enough: the secret is resolved from the environment the job runs in.
 
+#### CI deployment
+
+For `app` and `webapp` projects, `gasdev init` creates `.github/workflows/deploy.yml` (only when absent) pinned to the installed gasdev version. Pushing `develop` deploys `dev` and pushing `main` deploys `live`, so create both [environments](#environments) before the first push. Personal dev copies of the script keep using the local `.clasp.json` written by `gasdev setup`.
+
 #### Environments
 
 | Environment | Branch    | Secret         | Variables                            |
@@ -1463,10 +1468,11 @@ The IDs are variables, not secrets, on purpose: GitHub drops job outputs that co
 
 #### Project types
 
-| Project               | `GAS_DEPLOYMENT_ID` | Result                                   |
-| --------------------- | ------------------- | ---------------------------------------- |
-| Web app               | set                 | Scope check, push, new version, redeploy |
-| Library, bound script | not set             | Push only                                |
+| `gasdev.type`       | `GAS_DEPLOYMENT_ID` | Result                                       |
+| ------------------- | ------------------- | -------------------------------------------- |
+| `webapp`            | set                 | Scope check, push, new version, redeploy     |
+| `app`, bound script | not set             | Push only                                    |
+| `library`           | not applicable      | Released with `gasdev release`, not deployed |
 
 `GAS_DEPLOYMENT_ID` must be a versioned web app deployment, not the HEAD deployment.
 

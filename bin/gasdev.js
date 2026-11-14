@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
 import { parseArgs } from 'node:util';
+import prompts from 'prompts';
 import pkg from '../package.json' with { type: 'json' };
 import { main as bundleMain } from '../src/bundle/cli.js';
 import { main as ciMain } from '../src/ci/cli.js';
@@ -8,6 +9,7 @@ import { main as releaseMain } from '../src/release/cli.js';
 import {
   CheckError,
   checkProject,
+  chooseProjectType,
   formatReport,
   initProject,
   loadConfig,
@@ -203,7 +205,24 @@ export async function main(argv) {
     if (isRun) return runRun(process.cwd(), { keep: values.keep === true });
     const fixed = isInit || values.fix === true;
     if (fixed) {
-      for (const message of initProject(process.cwd())) {
+      /** @type {string | undefined} */
+      let type;
+      if (isInit) {
+        const config = loadConfig(process.cwd());
+        if (config.preset === 'gas' && config.type === undefined) {
+          if (process.stdin.isTTY && process.stdout.isTTY) {
+            type = await chooseProjectType(prompts);
+          } else {
+            process.stdout.write(
+              'gasdev.type is not set; set it in package.json (library, app or webapp) and rerun init\n',
+            );
+          }
+        }
+      }
+      for (const message of initProject(process.cwd(), {
+        type,
+        init: isInit,
+      })) {
         process.stdout.write(`${message}\n`);
       }
     }

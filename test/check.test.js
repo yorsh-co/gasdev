@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -10,7 +11,12 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { placeholderScript } from '../bin/check.js';
+import {
+  CheckError,
+  chooseProjectType,
+  initProject,
+  placeholderScript,
+} from '../bin/check.js';
 import { REPO_ROOT } from './support.js';
 
 const BIN = join(REPO_ROOT, 'bin', 'gasdev.js');
@@ -46,9 +52,16 @@ function createCleanProject(preset, pkgExtra = {}) {
     join(dir, '.github', 'dependabot.yml'),
     read('.github/dependabot.yml'),
   );
-  const { required, present, gasTest } = JSON.parse(read('scripts.json'));
+  const { required, library, present, gasTest } = JSON.parse(
+    read('scripts.json'),
+  );
   const configured = /** @type {any} */ (pkgExtra.gasdev)?.gasTest;
-  const scripts = { ...required, ...(configured && gasTest) };
+  const projectType = /** @type {any} */ (pkgExtra.gasdev)?.type;
+  const scripts = {
+    ...required,
+    ...((projectType === undefined || projectType === 'library') && library),
+    ...(configured && gasTest),
+  };
   for (const name of present) scripts[name] = 'true';
   const { type, prettier, overrides } = JSON.parse(read('package.json'));
   writePackage(dir, {
@@ -664,7 +677,7 @@ describe('check (preset specifics)', () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('unknown "gasdev" key(s): presets');
     expect(result.stderr).toContain(
-      '(expected: preset, loadOrder, peers, gasTest, html, bundle, release, ci)',
+      '(expected: preset, type, loadOrder, peers, gasTest, html, bundle, release, ci)',
     );
   });
 
@@ -938,8 +951,12 @@ describe('check (gasTest)', () => {
 describe('init', () => {
   const tpl = (/** @type {string} */ preset, /** @type {string} */ file) =>
     readFileSync(join(TEMPLATES, preset, file), 'utf8');
-  const scriptsOf = (/** @type {string} */ preset) =>
-    JSON.parse(tpl(preset, 'scripts.json'));
+  const scriptsOf = (/** @type {string} */ preset) => {
+    const template = JSON.parse(tpl(preset, 'scripts.json'));
+    const { library, ...rest } = template;
+    // A project without gasdev.type is treated as a library.
+    return { ...rest, required: { ...rest.required, ...library } };
+  };
 
   /**
    * @param {'gas' | 'node'} preset
@@ -1205,6 +1222,349 @@ describe('init', () => {
     expect(result.status).toBe(2);
     expect(result.stderr).toContain(message);
     expect(existsSync(join(dir, '.gitignore'))).toBe(false);
+  });
+});
+
+describe('gasdev.type', () => {
+  /**
+   * @param {Record<string, unknown>} [extra]
+   * @returns {string}
+   */
+  function emptyProject(extra = {}) {
+    const dir = mkdtempSync(join(tmpdir(), 'gasdev-type-'));
+    dirs.push(dir);
+    writePackage(dir, { name: 'consumer', ...extra });
+    return dir;
+  }
+
+  it('rejects an unknown type', () => {
+    const dir = createCleanProject('gas', { gasdev: { type: 'lib' } });
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'unknown type "lib" (expected: library, app, webapp)',
+    );
+  });
+
+  it('rejects a type with the node preset', () => {
+    const dir = createCleanProject('node', {
+      gasdev: { preset: 'node', type: 'app' },
+    });
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('"gasdev.type" requires the gas preset');
+  });
+
+  it.each(['library', 'app', 'webapp'])('accepts %s', (type) => {
+    const dir = createCleanProject('gas', { gasdev: { type } });
+    expect(run(dir, ['check']).status).toBe(0);
+  });
+
+  describe('chooseProjectType', () => {
+    it('returns the chosen type', async () => {
+      const prompt = async () => ({ type: 'webapp' });
+      expect(await chooseProjectType(prompt)).toBe('webapp');
+    });
+
+    it('throws when cancelled', async () => {
+      await expect(chooseProjectType(async () => ({}))).rejects.toThrow(
+        new CheckError('init cancelled'),
+      );
+    });
+  });
+
+  describe('initProject with a type', () => {
+    it('persists it once and not again on rerun', () => {
+      const dir = emptyProject();
+      const first = initProject(dir, { type: 'app' });
+      expect(first).toContain('package.json: set gasdev.type to "app"');
+      expect(readPackage(dir).gasdev).toEqual({ type: 'app' });
+      expect(initProject(dir, { type: 'app' })).toEqual([]);
+    });
+
+    it('keeps other gasdev keys', () => {
+      const dir = emptyProject({ gasdev: { loadOrder: ['a.ts'] } });
+      initProject(dir, { type: 'library' });
+      expect(readPackage(dir).gasdev).toEqual({
+        loadOrder: ['a.ts'],
+        type: 'library',
+      });
+    });
+
+    it('does not override a configured type', () => {
+      const dir = emptyProject({ gasdev: { type: 'app' } });
+      initProject(dir, { type: 'library' });
+      expect(readPackage(dir).gasdev.type).toBe('app');
+      const scripts = readPackage(dir).scripts ?? {};
+      expect(scripts).not.toHaveProperty('release');
+      expect(scripts).not.toHaveProperty('build:release');
+    });
+
+    it('writes nothing when the passed type is invalid', () => {
+      const dir = emptyProject();
+      const before = readdirSync(dir).sort();
+      const pkgBefore = readFileSync(join(dir, 'package.json'), 'utf8');
+      expect(() => initProject(dir, { type: 'bogus' })).toThrow(CheckError);
+      expect(readdirSync(dir).sort()).toEqual(before);
+      expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(pkgBefore);
+    });
+  });
+
+  describe('type-driven files', () => {
+    const templateFile = (/** @type {string} */ f) =>
+      readFileSync(join(TEMPLATES, 'gas', 'files', f), 'utf8');
+    const ALL = [
+      'tsconfig.json',
+      'tsconfig.test.json',
+      'eslint.config.js',
+      'tsconfig.frontend.json',
+      'gas-test/tsconfig.json',
+    ];
+    const created = (/** @type {string} */ dir) =>
+      ALL.filter((f) => existsSync(join(dir, f)));
+
+    it.each([
+      ['library', ['tsconfig.json', 'tsconfig.test.json', 'eslint.config.js']],
+      ['app', ['tsconfig.json', 'tsconfig.test.json', 'eslint.config.js']],
+      [
+        'webapp',
+        [
+          'tsconfig.json',
+          'tsconfig.test.json',
+          'eslint.config.js',
+          'tsconfig.frontend.json',
+        ],
+      ],
+    ])('init creates the %s file set from the templates', (type, expected) => {
+      const dir = emptyProject({ gasdev: { type } });
+      const messages = initProject(dir, { init: true });
+      expect(created(dir).sort()).toEqual([...expected].sort());
+      for (const file of expected) {
+        expect(messages).toContain(`${file}: created`);
+        const template =
+          type === 'webapp' && file === 'eslint.config.js'
+            ? 'eslint.webapp.config.js'
+            : file;
+        expect(readFileSync(join(dir, file), 'utf8')).toBe(
+          templateFile(template),
+        );
+        if (file.endsWith('.json')) {
+          expect(() =>
+            JSON.parse(readFileSync(join(dir, file), 'utf8')),
+          ).not.toThrow();
+        }
+      }
+      expect(initProject(dir, { init: true })).toEqual([]);
+    });
+
+    it('creates the chosen type files and gas-test/tsconfig.json when configured', () => {
+      const dir = emptyProject({
+        gasdev: {
+          loadOrder: ['a.ts'],
+          gasTest: { scopes: ['https://www.googleapis.com/auth/drive'] },
+        },
+      });
+      const messages = initProject(dir, { type: 'app', init: true });
+      expect(messages).toContain('gas-test/tsconfig.json: created');
+      expect(existsSync(join(dir, 'gas-test', 'tsconfig.json'))).toBe(true);
+    });
+
+    it('leaves existing files untouched', () => {
+      const dir = emptyProject({ gasdev: { type: 'app' } });
+      writeFileSync(join(dir, 'tsconfig.json'), '{ "mine": true }\n');
+      const messages = initProject(dir, { init: true });
+      expect(readFileSync(join(dir, 'tsconfig.json'), 'utf8')).toBe(
+        '{ "mine": true }\n',
+      );
+      expect(messages).not.toContain('tsconfig.json: created');
+      expect(messages).toContain('tsconfig.test.json: created');
+    });
+
+    it('creates nothing without init, or without a known type', () => {
+      const dir = emptyProject({ gasdev: { type: 'webapp' } });
+      initProject(dir);
+      expect(created(dir)).toEqual([]);
+      const untyped = emptyProject();
+      initProject(untyped, { init: true });
+      expect(created(untyped)).toEqual([]);
+    });
+
+    it('check --fix creates none of them', () => {
+      const dir = emptyProject({ gasdev: { type: 'webapp' } });
+      run(dir, ['check', '--fix']);
+      expect(created(dir)).toEqual([]);
+    });
+
+    it('the init command creates them', () => {
+      const dir = emptyProject({ gasdev: { type: 'webapp' } });
+      run(dir, ['init']);
+      expect(existsSync(join(dir, 'tsconfig.frontend.json'))).toBe(true);
+    });
+  });
+
+  describe('release scripts', () => {
+    const pkgWithScript = (
+      /** @type {string} */ dir,
+      /** @type {string} */ name,
+      /** @type {string} */ value,
+    ) => {
+      const pkg = readPackage(dir);
+      pkg.scripts[name] = value;
+      writePackage(dir, pkg);
+    };
+    const RELEASE = ['release', 'build:release'];
+    const withoutRelease = (/** @type {string} */ type) => {
+      const dir = createCleanProject('gas', { gasdev: { type } });
+      const pkg = readPackage(dir);
+      for (const name of RELEASE) delete pkg.scripts[name];
+      writePackage(dir, pkg);
+      return dir;
+    };
+
+    it.each(['library', undefined])('requires them for type %s', (type) => {
+      const dir = withoutRelease('library');
+      if (type === undefined) {
+        const pkg = readPackage(dir);
+        delete pkg.gasdev;
+        writePackage(dir, pkg);
+      }
+      const result = run(dir, ['check']);
+      expect(result.status).toBe(1);
+      for (const name of RELEASE) {
+        expect(result.stderr).toContain(`scripts.${name} is missing`);
+      }
+      initProject(dir);
+      expect(Object.keys(readPackage(dir).scripts)).toEqual(
+        expect.arrayContaining(RELEASE),
+      );
+    });
+
+    it.each(['app', 'webapp'])(
+      'does not require or add them for %s',
+      (type) => {
+        const dir = withoutRelease(type);
+        expect(run(dir, ['check']).status).toBe(0);
+        initProject(dir);
+        const scripts = readPackage(dir).scripts;
+        for (const name of RELEASE) expect(scripts[name]).toBeUndefined();
+      },
+    );
+
+    it('leaves an existing release script in an app alone', () => {
+      const dir = createCleanProject('gas', { gasdev: { type: 'app' } });
+      pkgWithScript(dir, 'release', 'echo custom');
+      expect(run(dir, ['check']).status).toBe(0);
+    });
+
+    it('does not affect the node preset', () => {
+      const dir = createCleanProject('node', {
+        gasdev: { preset: 'node' },
+      });
+      expect(run(dir, ['check']).status).toBe(0);
+    });
+  });
+
+  describe('clasp and manifest templates', () => {
+    const NAMES = ['.clasp.example.json', 'appsscript.example.json'];
+    const present = (/** @type {string} */ dir) =>
+      NAMES.filter((f) => existsSync(join(dir, f)));
+
+    it.each([
+      ['app', NAMES],
+      ['webapp', NAMES],
+      ['library', []],
+    ])('init creates them for %s: %j', (type, expected) => {
+      const dir = emptyProject({ gasdev: { type } });
+      const messages = initProject(dir, { init: true });
+      expect(present(dir)).toEqual(expected);
+      for (const f of expected) {
+        expect(messages).toContain(
+          f === 'appsscript.example.json'
+            ? `${f}: created; set oauthScopes in ${f}`
+            : `${f}: created`,
+        );
+      }
+    });
+
+    it('webapp manifest is least-privileged, app has no webapp block', () => {
+      const web = emptyProject({ gasdev: { type: 'webapp' } });
+      initProject(web, { init: true });
+      expect(
+        JSON.parse(readFileSync(join(web, 'appsscript.example.json'), 'utf8'))
+          .webapp,
+      ).toEqual({ executeAs: 'USER_DEPLOYING', access: 'MYSELF' });
+      const app = emptyProject({ gasdev: { type: 'app' } });
+      initProject(app, { init: true });
+      expect(
+        JSON.parse(readFileSync(join(app, 'appsscript.example.json'), 'utf8')),
+      ).not.toHaveProperty('webapp');
+    });
+
+    it('leaves existing files untouched and is skipped without init', () => {
+      const dir = emptyProject({ gasdev: { type: 'app' } });
+      initProject(dir);
+      expect(present(dir)).toEqual([]);
+      writeFileSync(join(dir, '.clasp.example.json'), '{ "mine": true }\n');
+      initProject(dir, { init: true });
+      expect(readFileSync(join(dir, '.clasp.example.json'), 'utf8')).toBe(
+        '{ "mine": true }\n',
+      );
+      expect(present(dir)).toEqual(NAMES);
+    });
+  });
+
+  describe('deploy workflow', () => {
+    const FILE = '.github/workflows/deploy.yml';
+    const version = JSON.parse(
+      readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
+    ).version;
+
+    it.each(['app', 'webapp'])('init creates it for %s', (type) => {
+      const dir = emptyProject({ gasdev: { type } });
+      const messages = initProject(dir, { init: true });
+      expect(messages).toContain(
+        `${FILE}: created; add the dev and live environments (see "CI deployment" in the README)`,
+      );
+      const text = readFileSync(join(dir, FILE), 'utf8');
+      const template = readFileSync(
+        join(REPO_ROOT, 'templates/gas/files', FILE),
+        'utf8',
+      );
+      expect(text).not.toContain('{{GASDEV_VERSION}}');
+      expect(text).toBe(template.replaceAll('{{GASDEV_VERSION}}', version));
+    });
+
+    it('does not create it for a library or without init', () => {
+      const lib = emptyProject({ gasdev: { type: 'library' } });
+      initProject(lib, { init: true });
+      expect(existsSync(join(lib, FILE))).toBe(false);
+      const app = emptyProject({ gasdev: { type: 'app' } });
+      initProject(app);
+      expect(existsSync(join(app, FILE))).toBe(false);
+    });
+
+    it('leaves an existing file untouched', () => {
+      const dir = emptyProject({ gasdev: { type: 'app' } });
+      mkdirSync(join(dir, '.github/workflows'), { recursive: true });
+      writeFileSync(join(dir, FILE), 'mine\n');
+      initProject(dir, { init: true });
+      expect(readFileSync(join(dir, FILE), 'utf8')).toBe('mine\n');
+    });
+  });
+
+  it('init without a TTY prints the note and still runs the rest', () => {
+    const dir = emptyProject();
+    const result = run(dir, ['init']);
+    expect(result.stdout).toContain(
+      'gasdev.type is not set; set it in package.json (library, app or webapp) and rerun init',
+    );
+    expect(readPackage(dir).gasdev).toBeUndefined();
+    expect(existsSync(join(dir, '.gitignore'))).toBe(true);
+  });
+
+  it('init with a configured type prints no note', () => {
+    const dir = emptyProject({ gasdev: { type: 'app' } });
+    expect(run(dir, ['init']).stdout).not.toContain('gasdev.type is not set');
   });
 });
 
