@@ -419,7 +419,7 @@ Required lines per preset:
 | `.gitignore`      | `node_modules/`, `dist/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` | `node_modules/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` |
 | `.prettierignore` | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`                       | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`              |
 
-Required scripts, exact values, for the `gas` preset. They assume `rimraf` is a dev dependency of the project:
+Required scripts, exact values, for the `gas` preset. They assume `rimraf` is a dev dependency of the project. `release` and `build:release` are required for `library` projects (or when `gasdev.type` is unset) only:
 
 | Script          | Value                                                                                       |
 | --------------- | ------------------------------------------------------------------------------------------- |

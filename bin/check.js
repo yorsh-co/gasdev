@@ -91,6 +91,7 @@ const SELF_TEST = 'npm run test:coverage';
 /**
  * @typedef {object} ScriptsTemplate
  * @property {Record<string, string>} required Scripts that must have exactly this value.
+ * @property {Record<string, string>} [library] Scripts required, with exactly this value, for `library` projects and projects without a type.
  * @property {string[]} present Scripts that must exist with any value.
  * @property {Record<string, string>} [gasTest] Scripts required, with exactly this value, when `gasTest` is configured.
  */
@@ -569,9 +570,10 @@ function checkDependabot(cwd, preset) {
  * @param {Record<string, unknown>} pkg
  * @param {string} preset
  * @param {GasTestConfig | undefined} gasTest Configured `gasTest` settings, if any.
+ * @param {string | undefined} type Project type, if set.
  * @returns {Drift[]}
  */
-function checkScripts(pkg, preset, gasTest) {
+function checkScripts(pkg, preset, gasTest, type) {
   const file = 'package.json';
   const template = /** @type {ScriptsTemplate} */ (
     readJson(new URL(`${preset}/scripts.json`, TEMPLATES), 'scripts template')
@@ -580,7 +582,11 @@ function checkScripts(pkg, preset, gasTest) {
   const isSelf = pkg['name'] === 'gasdev';
   /** @type {Drift[]} */
   const drift = [];
-  const required = { ...template.required, ...(gasTest && template.gasTest) };
+  const required = {
+    ...template.required,
+    ...((type === undefined || type === 'library') && template.library),
+    ...(gasTest && template.gasTest),
+  };
   for (const [name, wanted] of Object.entries(required)) {
     // The `npm run test &&` rewrite matches the template's `check` wording literally. If that
     // changes, test/check.test.js "requires the coverage gate in this package itself" fails.
@@ -866,12 +872,12 @@ export function loadConfig(cwd) {
  */
 export function checkProject(cwd) {
   const pkg = readPackage(cwd);
-  const { preset, loadOrder, gasTest, html } = resolveConfig(pkg);
+  const { preset, loadOrder, gasTest, html, type } = resolveConfig(pkg);
   const drift = [
     ...checkIgnoreFile(cwd, preset, '.gitignore'),
     ...checkIgnoreFile(cwd, preset, '.prettierignore'),
     ...checkDependabot(cwd, preset),
-    ...checkScripts(pkg, preset, gasTest),
+    ...checkScripts(pkg, preset, gasTest, type),
     ...checkPackageFields(pkg, preset),
     ...checkPeerTypesVersion(cwd, pkg),
     ...(loadOrder ? checkLoadOrder(cwd, loadOrder) : []),
@@ -990,13 +996,18 @@ function createDeployWorkflow(cwd, type) {
  * @param {Record<string, unknown>} pkg Parsed package.json.
  * @param {string} preset
  * @param {GasTestConfig | undefined} gasTest Configured `gasTest` settings, if any.
+ * @param {string | undefined} type Project type, if set.
  * @returns {string[]} One message per added script.
  */
-function addScripts(pkg, preset, gasTest) {
+function addScripts(pkg, preset, gasTest, type) {
   const template = /** @type {ScriptsTemplate} */ (
     readJson(new URL(`${preset}/scripts.json`, TEMPLATES), 'scripts template')
   );
-  const required = { ...template.required, ...(gasTest && template.gasTest) };
+  const required = {
+    ...template.required,
+    ...((type === undefined || type === 'library') && template.library),
+    ...(gasTest && template.gasTest),
+  };
   const scripts = isRecord(pkg['scripts']) ? pkg['scripts'] : {};
   const missing = Object.entries(required).filter(
     ([name]) => scripts[name] === undefined,
@@ -1129,7 +1140,7 @@ export function initProject(cwd, { type, init = false } = {}) {
     ...createDependabot(cwd, preset),
   ];
   const pkgMessages = [
-    ...addScripts(pkg, preset, gasTest),
+    ...addScripts(pkg, preset, gasTest, type ?? configuredType),
     ...addPackageFields(pkg, preset),
   ];
   if (type !== undefined && configuredType === undefined) {

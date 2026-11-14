@@ -51,9 +51,16 @@ function createCleanProject(preset, pkgExtra = {}) {
     join(dir, '.github', 'dependabot.yml'),
     read('.github/dependabot.yml'),
   );
-  const { required, present, gasTest } = JSON.parse(read('scripts.json'));
+  const { required, library, present, gasTest } = JSON.parse(
+    read('scripts.json'),
+  );
   const configured = /** @type {any} */ (pkgExtra.gasdev)?.gasTest;
-  const scripts = { ...required, ...(configured && gasTest) };
+  const projectType = /** @type {any} */ (pkgExtra.gasdev)?.type;
+  const scripts = {
+    ...required,
+    ...((projectType === undefined || projectType === 'library') && library),
+    ...(configured && gasTest),
+  };
   for (const name of present) scripts[name] = 'true';
   const { type, prettier, overrides } = JSON.parse(read('package.json'));
   writePackage(dir, {
@@ -943,8 +950,12 @@ describe('check (gasTest)', () => {
 describe('init', () => {
   const tpl = (/** @type {string} */ preset, /** @type {string} */ file) =>
     readFileSync(join(TEMPLATES, preset, file), 'utf8');
-  const scriptsOf = (/** @type {string} */ preset) =>
-    JSON.parse(tpl(preset, 'scripts.json'));
+  const scriptsOf = (/** @type {string} */ preset) => {
+    const template = JSON.parse(tpl(preset, 'scripts.json'));
+    const { library, ...rest } = template;
+    // A project without gasdev.type is treated as a library.
+    return { ...rest, required: { ...rest.required, ...library } };
+  };
 
   /**
    * @param {'gas' | 'node'} preset
@@ -1375,6 +1386,68 @@ describe('gasdev.type', () => {
       const dir = emptyProject({ gasdev: { type: 'webapp' } });
       run(dir, ['init']);
       expect(existsSync(join(dir, 'tsconfig.frontend.json'))).toBe(true);
+    });
+  });
+
+  describe('release scripts', () => {
+    const pkgWithScript = (
+      /** @type {string} */ dir,
+      /** @type {string} */ name,
+      /** @type {string} */ value,
+    ) => {
+      const pkg = readPackage(dir);
+      pkg.scripts[name] = value;
+      writePackage(dir, pkg);
+    };
+    const RELEASE = ['release', 'build:release'];
+    const withoutRelease = (/** @type {string} */ type) => {
+      const dir = createCleanProject('gas', { gasdev: { type } });
+      const pkg = readPackage(dir);
+      for (const name of RELEASE) delete pkg.scripts[name];
+      writePackage(dir, pkg);
+      return dir;
+    };
+
+    it.each(['library', undefined])('requires them for type %s', (type) => {
+      const dir = withoutRelease('library');
+      if (type === undefined) {
+        const pkg = readPackage(dir);
+        delete pkg.gasdev;
+        writePackage(dir, pkg);
+      }
+      const result = run(dir, ['check']);
+      expect(result.status).toBe(1);
+      for (const name of RELEASE) {
+        expect(result.stderr).toContain(`scripts.${name} is missing`);
+      }
+      initProject(dir);
+      expect(Object.keys(readPackage(dir).scripts)).toEqual(
+        expect.arrayContaining(RELEASE),
+      );
+    });
+
+    it.each(['app', 'webapp'])(
+      'does not require or add them for %s',
+      (type) => {
+        const dir = withoutRelease(type);
+        expect(run(dir, ['check']).status).toBe(0);
+        initProject(dir);
+        const scripts = readPackage(dir).scripts;
+        for (const name of RELEASE) expect(scripts[name]).toBeUndefined();
+      },
+    );
+
+    it('leaves an existing release script in an app alone', () => {
+      const dir = createCleanProject('gas', { gasdev: { type: 'app' } });
+      pkgWithScript(dir, 'release', 'echo custom');
+      expect(run(dir, ['check']).status).toBe(0);
+    });
+
+    it('does not affect the node preset', () => {
+      const dir = createCleanProject('node', {
+        gasdev: { preset: 'node' },
+      });
+      expect(run(dir, ['check']).status).toBe(0);
     });
   });
 

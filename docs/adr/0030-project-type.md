@@ -18,6 +18,7 @@
 - All types: `tsconfig.json`, `tsconfig.test.json` and `eslint.config.js` (the web app variant for `webapp`); `gas-test/tsconfig.json` when `gasTest` is configured.
 - `webapp`: also `tsconfig.frontend.json`.
 - `app` and `webapp`: `.clasp.example.json`, `appsscript.example.json` (a `webapp` manifest gets a least-privileged `webapp` block) and `.github/workflows/deploy.yml`, a caller of `gas-deploy.yml` pinned to gasdev's own version, with `permissions: contents: read` and no expression interpolation in `run:`.
+- `release` and `build:release` are required (and added) for `library` only: apps deploy through CI (`deploy.yml`), so `gasdev release` does not apply. An unset type is treated as `library` for backward compatibility.
 
 Personal dev copies still use the local `.clasp.json` from `gasdev setup`.
 
