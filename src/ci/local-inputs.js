@@ -21,7 +21,7 @@ const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
  * @returns {true | string}
  */
 function validateRequiredId(value) {
-  return ID_PATTERN.test(value) || 'Use letters, digits, "-" and "_".';
+  return ID_PATTERN.test(value.trim()) || 'Use letters, digits, "-" and "_".';
 }
 
 /**
@@ -60,7 +60,7 @@ function defaultReadHead(cwd) {
  * @param {() => string | undefined} [options.readHead] Defaults to `git rev-parse HEAD`.
  * @returns {Promise<NodeJS.ProcessEnv>} A new object; `env` is not mutated.
  * @throws {CancelledError} If a prompt is cancelled.
- * @throws {DeployError} If `~/.clasprc.json` exists but cannot be read.
+ * @throws {DeployError} If `~/.clasprc.json` or `.env` exists but cannot be read.
  */
 export async function completeLocalEnv(
   env,
@@ -68,7 +68,22 @@ export async function completeLocalEnv(
 ) {
   const completed = { ...env };
   const head = readHead ?? (() => defaultReadHead(cwd));
-  const dotenv = readEnv(join(cwd, '.env'));
+  /** @type {Record<string, string> | undefined} */
+  let dotenv;
+  const readDotenv = () => {
+    if (!dotenv) {
+      const file = join(cwd, '.env');
+      try {
+        dotenv = readEnv(file);
+      } catch (error) {
+        throw new DeployError(
+          `Cannot read ${file} (${/** @type {NodeJS.ErrnoException} */ (error).code})`,
+          { cause: error },
+        );
+      }
+    }
+    return dotenv;
+  };
 
   /**
    * Asks one text question and fails on cancel.
@@ -109,7 +124,7 @@ export async function completeLocalEnv(
   if (!completed.GAS_SCRIPT_ID) {
     completed.GAS_SCRIPT_ID = await ask(
       'Script ID (GAS_SCRIPT_ID)',
-      dotenv.GAS_SCRIPT_ID ?? '',
+      readDotenv().GAS_SCRIPT_ID ?? '',
       validateRequiredId,
     );
   }
@@ -117,7 +132,7 @@ export async function completeLocalEnv(
   if (completed.GAS_DEPLOYMENT_ID === undefined) {
     const answer = await ask(
       'Deployment ID (GAS_DEPLOYMENT_ID, empty: push only)',
-      dotenv.GAS_DEPLOYMENT_ID ?? '',
+      readDotenv().GAS_DEPLOYMENT_ID ?? '',
       validateOptionalId,
     );
     if (answer !== '') {

@@ -48,11 +48,18 @@ function sandbox() {
         createClasp({
           ...options,
           bin: fakeClaspBin,
-          env: { ...options.env, FAKE_CLASP_LOG: fake.logPath },
+          env: {
+            ...options.env,
+            FAKE_CLASP_LOG: fake.logPath,
+            FAKE_CLASP_DEPLOYMENTS: JSON.stringify([
+              { deploymentId: 'dep-1', versionNumber: 1 },
+            ]),
+            FAKE_CLASP_MANIFEST: JSON.stringify({ oauthScopes: [] }),
+          },
         })
     ),
   };
-  return { context, home, cwd, err, logPath: fake.logPath };
+  return { context, home, cwd, out, err, logPath: fake.logPath };
 }
 
 describe('main deploy without the mocked deploy', () => {
@@ -75,11 +82,32 @@ describe('main deploy without the mocked deploy', () => {
     const prompt = vi.fn(async () => ({ value: queue.shift() }));
     const code = await main(['deploy'], { ...context, prompt });
     expect(err.join('')).toBe('');
-    expect(code).toBe(0);
+    expect([code, err.join('')]).toEqual([0, '']);
     const calls = readCalls(logPath).map((call) => call.args.slice(-2));
     expect(calls).toEqual([['push', '--force']]);
     expect(
       JSON.parse(readFileSync(join(cwd, '.clasp.json'), 'utf8')).scriptId,
     ).toBe('script-1');
+  });
+
+  it('deploys with the prompted deployment and keeps the token out of the output', async () => {
+    const { context, home, out, err, logPath } = sandbox();
+    writeFileSync(
+      join(home, '.clasprc.json'),
+      JSON.stringify({
+        tokens: { default: { refresh_token: 'secret-token' } },
+      }),
+    );
+    const queue = ['script-1', 'dep-1', 'v1'];
+    const prompt = vi.fn(async () => ({ value: queue.shift() }));
+    const code = await main(['deploy'], { ...context, prompt });
+    expect([code, err.join('')]).toEqual([0, '']);
+    const calls = readCalls(logPath).map((call) => call.args);
+    const deploy = calls.find((args) => args.includes('create-deployment'));
+    expect(deploy).toBeDefined();
+    expect(deploy).toContain('dep-1');
+    expect(calls.flat()).toContain('v1');
+    expect(out.join('')).not.toContain('secret-token');
+    expect(err.join('')).not.toContain('secret-token');
   });
 });

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CancelledError } from '../../src/ci/errors.js';
+import { CancelledError, DeployError } from '../../src/ci/errors.js';
 import { completeLocalEnv } from '../../src/ci/local-inputs.js';
 
 const CREDENTIALS = '{"token":{"refresh_token":"x"}}';
@@ -161,6 +161,32 @@ describe('completeLocalEnv', () => {
     expect(questions[0]?.validate?.('ok_id-1')).toBe(true);
     expect(questions[1]?.validate?.('')).toBe(true);
     expect(questions[1]?.validate?.('bad id')).not.toBe(true);
+  });
+
+  it('validates IDs with surrounding whitespace', async () => {
+    const { prompt, questions } = fakePrompt(['script-1', '']);
+    await completeLocalEnv({}, { prompt, home, cwd });
+    expect(questions[0]?.validate?.('ok_id-1 ')).toBe(true);
+    expect(questions[1]?.validate?.(' ok_id-1\n')).toBe(true);
+  });
+
+  it('wraps a .env read failure in DeployError', async () => {
+    mkdirSync(join(cwd, '.env'));
+    const { prompt } = fakePrompt(['script-1', '']);
+    await expect(
+      completeLocalEnv({}, { prompt, home, cwd }),
+    ).rejects.toBeInstanceOf(DeployError);
+  });
+
+  it('does not read .env when nothing needs a prompt', async () => {
+    mkdirSync(join(cwd, '.env'));
+    const { prompt } = fakePrompt([]);
+    await expect(
+      completeLocalEnv(
+        { GAS_SCRIPT_ID: 's', GAS_DEPLOYMENT_ID: '' },
+        { prompt, home, cwd },
+      ),
+    ).resolves.toBeDefined();
   });
 
   it('throws CancelledError on cancel', async () => {
