@@ -14,6 +14,9 @@
 ### Changed
 
 - Dev-only: `npm run lint:workflows` validates every file in `.github/workflows`
+- `eslint` peer floor raised to `^10.15.0`; this is non-breaking, since npm upgrades within an existing `^10` range, and only an exact pin below 10.15.0 needs moving
+- `typescript-eslint` floor raised to `^8.72.2`
+- Upstream advisories: the `typescript-eslint` `minimatch` finding (`overrides.minimatch` stays required) and the `@google/clasp` → `zod` finding wait on upstream releases
 
 ---
 
