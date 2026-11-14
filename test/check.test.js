@@ -15,6 +15,9 @@ import { REPO_ROOT } from './support.js';
 
 const BIN = join(REPO_ROOT, 'bin', 'gasdev.js');
 const TEMPLATES = join(REPO_ROOT, 'templates');
+const GASDEV_NODE = JSON.parse(
+  readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
+).engines.node;
 
 /** @type {string[]} */
 const dirs = [];
@@ -47,7 +50,16 @@ function createCleanProject(preset, pkgExtra = {}) {
   const configured = /** @type {any} */ (pkgExtra.gasdev)?.gasTest;
   const scripts = { ...required, ...(configured && gasTest) };
   for (const name of present) scripts[name] = 'true';
-  writePackage(dir, { name: 'consumer', scripts, ...pkgExtra });
+  const { type, prettier, overrides } = JSON.parse(read('package.json'));
+  writePackage(dir, {
+    name: 'consumer',
+    type,
+    prettier,
+    engines: { node: GASDEV_NODE },
+    overrides,
+    scripts,
+    ...pkgExtra,
+  });
   return dir;
 }
 
@@ -337,12 +349,138 @@ describe.each(['gas', 'node'])('check (%s preset)', (preset) => {
       expect(readPackage(dir).scripts.lint).toBe(expected);
     });
 
+    it('adds missing type, engines and overrides', () => {
+      const dir = make();
+      const pkg = readPackage(dir);
+      delete pkg.type;
+      delete pkg.engines;
+      delete pkg.overrides;
+      writePackage(dir, pkg);
+      const result = run(dir, ['check', '--fix']);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('package.json: added type');
+      expect(result.stdout).toContain('package.json: added engines.node');
+      expect(result.stdout).toContain(
+        'package.json: added overrides.minimatch',
+      );
+      const fixed = readPackage(dir);
+      expect(fixed.type).toBe('module');
+      expect(fixed.engines).toEqual({ node: GASDEV_NODE });
+      expect(fixed.overrides).toEqual({ minimatch: '^11.0.1' });
+      expect(run(dir, ['check']).status).toBe(0);
+    });
+
     it('creates a missing dependabot.yml', () => {
       const dir = make();
       rmSync(join(dir, '.github', 'dependabot.yml'));
       const result = run(dir, ['check', '--fix']);
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('.github/dependabot.yml: created');
+    });
+  });
+});
+
+describe.each(['gas', 'node'])(
+  'check (package fields, %s preset)',
+  (preset) => {
+    const make = (/** @type {Record<string, unknown>} */ extra = {}) =>
+      createCleanProject(/** @type {'gas' | 'node'} */ (preset), {
+        ...(preset === 'node' && { gasdev: { preset } }),
+        ...extra,
+      });
+    const drift = (/** @type {string} */ dir) => run(dir, ['check']).stderr;
+
+    it.each(['type', 'prettier'])('reports a missing %s', (key) => {
+      const dir = make({ [key]: undefined });
+      expect(drift(dir)).toContain(`${key} is missing`);
+    });
+
+    it.each([
+      ['type', 'commonjs'],
+      ['prettier', { semi: false }],
+    ])('reports a differing %s', (key, value) => {
+      const dir = make({ [key]: value });
+      expect(drift(dir)).toContain(`${key} differs`);
+    });
+
+    it('reports a missing engines.node', () => {
+      const dir = make({ engines: undefined });
+      expect(drift(dir)).toContain('engines.node is missing');
+    });
+
+    it('accepts a subset of the gasdev range', () => {
+      const dir = make({ engines: { node: '^24.0.0' } });
+      expect(run(dir, ['check']).status).toBe(0);
+    });
+
+    it.each(['>=20', 'not a range', 24])('reports engines.node %s', (node) => {
+      const dir = make({ engines: { node } });
+      expect(drift(dir)).toContain(
+        `engines.node ${JSON.stringify(node)} is not within gasdev's`,
+      );
+    });
+
+    it('reports engines that is not an object', () => {
+      const dir = make({ engines: '>=22' });
+      const output = drift(dir);
+      expect(output).toContain('engines must be an object');
+      expect(output).not.toContain('engines.node is missing');
+    });
+
+    it('exempts gasdev itself from prettier', () => {
+      const dir = make({ name: 'gasdev', prettier: undefined });
+      expect(drift(dir)).not.toContain('prettier');
+    });
+
+    it('reports a missing override', () => {
+      const dir = make({ overrides: undefined });
+      expect(drift(dir)).toContain(
+        'overrides.minimatch is missing; expected: "^11.0.1"',
+      );
+    });
+
+    it('reports a differing override', () => {
+      const dir = make({ overrides: { minimatch: '^10.0.0' } });
+      expect(drift(dir)).toContain('overrides.minimatch differs');
+    });
+
+    it('reports overrides that is not an object', () => {
+      const dir = make({ overrides: 'x' });
+      expect(drift(dir)).toContain('overrides must be an object');
+    });
+
+    it('ignores extra overrides', () => {
+      const dir = make({ overrides: { minimatch: '^11.0.1', extra: '1.0.0' } });
+      expect(run(dir, ['check']).status).toBe(0);
+    });
+
+    it('requires the clasp overrides only with @google/clasp', () => {
+      const without = make();
+      expect(drift(without)).not.toContain('gaxios');
+      for (const key of ['dependencies', 'devDependencies']) {
+        const dir = make({ [key]: { '@google/clasp': '^3.0.0' } });
+        expect(drift(dir)).toContain('overrides.gaxios is missing');
+        writePackage(dir, {
+          ...readPackage(dir),
+          overrides: { minimatch: '^11.0.1', gaxios: '^7.3.1' },
+        });
+        expect(run(dir, ['check']).status).toBe(0);
+      }
+    });
+  },
+);
+
+describe('gasdev overrides', () => {
+  it("equal the node template's merged overrides", () => {
+    const own = JSON.parse(
+      readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
+    ).overrides;
+    const template = JSON.parse(
+      readFileSync(join(TEMPLATES, 'node', 'package.json'), 'utf8'),
+    );
+    expect(own).toEqual({
+      ...template.overrides,
+      ...template.claspOverrides,
     });
   });
 });
@@ -845,6 +983,16 @@ describe('init', () => {
         ...Object.keys(required),
         ...present,
       ]);
+      expect(pkg.type).toBe('module');
+      expect(pkg.prettier).toBe('gasdev/prettier');
+      expect(pkg.engines).toEqual({ node: GASDEV_NODE });
+      expect(Object.keys(pkg).slice(-5)).toEqual([
+        'scripts',
+        'type',
+        'prettier',
+        'engines',
+        'overrides',
+      ]);
       for (const name of Object.keys(required)) {
         expect(result.stdout).toContain(`package.json: added scripts.${name}`);
       }
@@ -913,6 +1061,92 @@ describe('init', () => {
       expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(
         before.replace(/\n$/, ''),
       );
+    });
+
+    it('keeps existing fields and other engines keys', () => {
+      const dir = createEmptyProject(p, {
+        type: 'commonjs',
+        prettier: { semi: false },
+        engines: { npm: '>=10' },
+      });
+      run(dir, ['init']);
+      const pkg = readPackage(dir);
+      expect(pkg.type).toBe('commonjs');
+      expect(pkg.prettier).toEqual({ semi: false });
+      expect(pkg.engines).toEqual({ npm: '>=10', node: GASDEV_NODE });
+    });
+
+    it('does not add prettier to gasdev itself', () => {
+      const dir = createEmptyProject(p, { name: 'gasdev' });
+      run(dir, ['init']);
+      expect(readPackage(dir).prettier).toBeUndefined();
+    });
+
+    it('keeps a non-string engines.node', () => {
+      const dir = createEmptyProject(p, { engines: { node: 24 } });
+      run(dir, ['init']);
+      expect(readPackage(dir).engines).toEqual({ node: 24 });
+    });
+
+    it('keeps an existing engines.node', () => {
+      const dir = createEmptyProject(p, { engines: { node: '^24.0.0' } });
+      const result = run(dir, ['init']);
+      expect(readPackage(dir).engines).toEqual({ node: '^24.0.0' });
+      expect(result.stdout).not.toContain('engines.node');
+    });
+
+    it('adds the overrides, with clasp ones only when clasp is installed', () => {
+      const plain = createEmptyProject(p);
+      const result = run(plain, ['init']);
+      expect(readPackage(plain).overrides).toEqual({ minimatch: '^11.0.1' });
+      expect(result.stdout).toContain(
+        'package.json: added overrides.minimatch; run npm install to apply it',
+      );
+      const clasp = createEmptyProject(p, {
+        devDependencies: { '@google/clasp': '^3.0.0' },
+      });
+      run(clasp, ['init']);
+      expect(readPackage(clasp).overrides).toEqual({
+        minimatch: '^11.0.1',
+        gaxios: '^7.3.1',
+      });
+    });
+
+    it('keeps a differing override and extra ones', () => {
+      const dir = createEmptyProject(p, {
+        overrides: { minimatch: '^10.0.0', extra: '1.0.0' },
+      });
+      const result = run(dir, ['init']);
+      expect(readPackage(dir).overrides).toEqual({
+        minimatch: '^10.0.0',
+        extra: '1.0.0',
+      });
+      expect(result.stdout).not.toContain('overrides');
+      expect(result.stderr).toContain('overrides.minimatch differs');
+    });
+
+    it('writes nothing when overrides is invalid', () => {
+      const dir = createEmptyProject(p, { overrides: 'x' });
+      const before = readFileSync(join(dir, 'package.json'), 'utf8');
+      const result = run(dir, ['init']);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'package.json: overrides must be an object',
+      );
+      expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before);
+      expect(existsSync(join(dir, '.gitignore'))).toBe(false);
+    });
+
+    it('writes nothing when engines is invalid', () => {
+      const dir = createEmptyProject(p, { engines: '>=22' });
+      const before = readFileSync(join(dir, 'package.json'), 'utf8');
+      const result = run(dir, ['init']);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'package.json: engines must be an object',
+      );
+      expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before);
+      expect(existsSync(join(dir, '.gitignore'))).toBe(false);
     });
 
     it('writes nothing when the config is invalid', () => {
