@@ -14,6 +14,7 @@
 
 ### Changed
 
+- Dev-only: `bin/gasdev.js` runs `main` only when it is the entry point (symlinks resolved), so tests can import it without side effects
 - Dev-only: `npm run lint:workflows` validates every file in `.github/workflows`
 
 ---
