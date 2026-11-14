@@ -8,6 +8,10 @@
 
 - The `gasdev gas-test run` spreadsheet ID prompt now says it is optional and how to skip it (press Enter); the README documents the fallback chain
 
+### Added
+
+- On a terminal, `gasdev gas-test run` shows a progress spinner on stderr while clasp clones, pushes and runs the tests; non-TTY output is unchanged
+
 ---
 
 ## [3.2.0] - 2026-11-14
