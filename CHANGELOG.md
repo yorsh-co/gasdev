@@ -7,6 +7,7 @@
 ### Added
 
 - gasdev's own GitHub Releases are created by `.github/workflows/release.yml` when a stable `vX.Y.Z` tag is pushed, using the matching CHANGELOG section as notes; see [ADR 0028](docs/adr/0028-github-release-workflow.md)
+- `gasdev check` reports a `gas-deploy.yml@vX.Y.Z` ref that differs from the installed gasdev (or a non-version ref), and `init`/`check --fix` update the version in place; see [ADR 0031](docs/adr/0031-deploy-workflow-version.md)
 
 ### Changed
 
