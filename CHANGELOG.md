@@ -9,6 +9,7 @@
 - gasdev's own GitHub Releases are created by `.github/workflows/release.yml` when a stable `vX.Y.Z` tag is pushed, using the matching CHANGELOG section as notes; see [ADR 0028](docs/adr/0028-github-release-workflow.md)
 - `gasdev check`, `gasdev init` and `gasdev check --fix` verify and add `type`, `prettier`, `engines.node` (a subset of gasdev's range) and the audit `overrides`, including `gaxios` when `@google/clasp` is a dependency; see [ADR 0029](docs/adr/0029-package-json-fields.md)
 - `gasdev.type` (`library`, `app` or `webapp`) and type-driven scaffolding by `gasdev init`: tsconfig and ESLint files, `.clasp.example.json`, `appsscript.example.json` and, for `app` and `webapp`, `.github/workflows/deploy.yml` pinned to the installed gasdev version; the `release` and `build:release` scripts are now required only for `library` (or unset type); see [ADR 0030](docs/adr/0030-project-type.md)
+- `gasdev check` reports a `gas-deploy.yml@vX.Y.Z` ref that differs from the installed gasdev (or a non-version ref), and `init`/`check --fix` update the version in place; see [ADR 0031](docs/adr/0031-deploy-workflow-version.md)
 
 ### Changed
 
