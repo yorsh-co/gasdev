@@ -60,7 +60,8 @@ function defaultReadHead(cwd) {
  * @param {() => string | undefined} [options.readHead] Defaults to `git rev-parse HEAD`.
  * @returns {Promise<NodeJS.ProcessEnv>} A new object; `env` is not mutated.
  * @throws {CancelledError} If a prompt is cancelled.
- * @throws {DeployError} If `~/.clasprc.json` or `.env` exists but cannot be read.
+ * @throws {DeployError} If `~/.clasprc.json` is missing (before any prompt) or
+ *   unreadable, or if `.env` exists but cannot be read.
  */
 export async function completeLocalEnv(
   env,
@@ -112,12 +113,14 @@ export async function completeLocalEnv(
     try {
       completed.CLASPRC_JSON = readFileSync(file, 'utf8');
     } catch (error) {
-      if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'ENOENT') {
+      const code = /** @type {NodeJS.ErrnoException} */ (error).code;
+      if (code === 'ENOENT') {
         throw new DeployError(
-          `Cannot read ${file} (${/** @type {NodeJS.ErrnoException} */ (error).code})`,
+          `CLASPRC_JSON is not set and ${file} was not found. Run \`clasp login\`, then retry.`,
           { cause: error },
         );
       }
+      throw new DeployError(`Cannot read ${file} (${code})`, { cause: error });
     }
   }
 

@@ -203,6 +203,7 @@ describe('main deploy local prompts', () => {
     const cwd = join(root, 'project');
     mkdirSync(home);
     mkdirSync(cwd);
+    writeFileSync(join(home, '.clasprc.json'), '{"token":"x"}');
     const queue = [...answers];
     const prompt = vi.fn(async () => ({ value: queue.shift() }));
     return { home, cwd, prompt };
@@ -261,6 +262,7 @@ describe('main deploy local prompts', () => {
 
   it('returns 1 with a gasdev: error when ~/.clasprc.json cannot be read', async () => {
     const { home, cwd, prompt } = local([]);
+    rmSync(join(home, '.clasprc.json'));
     mkdirSync(join(home, '.clasprc.json'));
     const { context, err } = setup();
     vi.mocked(deploy).mockClear();

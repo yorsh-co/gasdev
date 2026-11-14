@@ -72,6 +72,17 @@ describe('main deploy without the mocked deploy', () => {
     expect(readCalls(logPath)).toEqual([]);
   });
 
+  it('fails with a clasp login hint before prompting without credentials', async () => {
+    const { context, home, err, logPath } = sandbox();
+    const prompt = vi.fn(async () => ({ value: 'x' }));
+    expect(await main(['deploy'], { ...context, prompt })).toBe(1);
+    expect(err.join('')).toBe(
+      `gasdev: CLASPRC_JSON is not set and ${join(home, '.clasprc.json')} was not found. Run \`clasp login\`, then retry.\n`,
+    );
+    expect(prompt).not.toHaveBeenCalled();
+    expect(readCalls(logPath)).toEqual([]);
+  });
+
   it('pushes with the prompted script ID and the stored credentials', async () => {
     const { context, home, cwd, err, logPath } = sandbox();
     writeFileSync(

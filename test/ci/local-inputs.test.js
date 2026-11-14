@@ -16,6 +16,7 @@ let cwd;
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'gasdev-home-'));
   cwd = mkdtempSync(join(tmpdir(), 'gasdev-cwd-'));
+  writeFileSync(join(home, '.clasprc.json'), CREDENTIALS);
 });
 
 afterEach(() => {
@@ -48,6 +49,7 @@ describe('completeLocalEnv', () => {
   });
 
   it('keeps an existing CLASPRC_JSON without reading the file', async () => {
+    rmSync(join(home, '.clasprc.json'));
     mkdirSync(join(home, '.clasprc.json'));
     const { prompt } = fakePrompt([]);
     const env = await completeLocalEnv(
@@ -61,10 +63,16 @@ describe('completeLocalEnv', () => {
     expect(env.CLASPRC_JSON).toBe('preset');
   });
 
-  it('leaves CLASPRC_JSON unset without a file', async () => {
-    const { prompt } = fakePrompt(['script-1', '']);
-    const env = await completeLocalEnv({}, { prompt, home, cwd });
-    expect(env.CLASPRC_JSON).toBeUndefined();
+  it('fails with a clasp login hint before prompting without a file', async () => {
+    rmSync(join(home, '.clasprc.json'));
+    const { prompt, questions } = fakePrompt(['script-1', '']);
+    const error = await completeLocalEnv({}, { prompt, home, cwd }).catch(
+      (e) => e,
+    );
+    expect(error).toBeInstanceOf(DeployError);
+    expect(error.message).toContain('clasp login');
+    expect(error.message).toContain(join(home, '.clasprc.json'));
+    expect(questions).toEqual([]);
   });
 
   it('prompts only for missing variables', async () => {

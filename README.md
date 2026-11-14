@@ -1312,7 +1312,7 @@ The wizard runs these steps in order:
 
 #### Local deploy
 
-On a terminal, `gasdev deploy` uses `~/.clasprc.json` when `CLASPRC_JSON` is unset, and asks for the script ID, the deployment ID (empty means push only) and the version description (default: HEAD). Answers are pre-filled from `.env`. Nothing is saved. In CI (no TTY, or `GITHUB_ACTIONS=true`) behaviour is unchanged. See [ADR 0032](docs/adr/0032-local-interactive-deploy.md).
+On a terminal, `gasdev deploy` uses `~/.clasprc.json` when `CLASPRC_JSON` is unset, and asks for the script ID, the deployment ID (empty means push only) and the version description (default: HEAD). Answers are pre-filled from `.env`. Nothing is saved. Without `~/.clasprc.json` the command stops before asking anything and tells you to run `clasp login`. In CI (no TTY, or `GITHUB_ACTIONS=true`) behaviour is unchanged. See [ADR 0032](docs/adr/0032-local-interactive-deploy.md).
 
 #### Wizard configuration
 
