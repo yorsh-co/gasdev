@@ -204,4 +204,25 @@ describe('gas-test run prompts', () => {
     expect(validate('')).toBe(true);
     expect(validate('1aB-_c')).toBe(true);
   });
+
+  it('shows a spinner on a TTY and clears it before returning', async () => {
+    const original = Object.getOwnPropertyDescriptor(process.stderr, 'isTTY');
+    Object.defineProperty(process.stderr, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+    const write = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    try {
+      await runRun(createProject('config-script'), {});
+      const writes = write.mock.calls.map(([chunk]) => String(chunk));
+      expect(writes.some((w) => w.includes('Running tests...'))).toBe(true);
+      expect(writes.at(-1)).toBe('\r\x1b[2K');
+    } finally {
+      write.mockRestore();
+      if (original) Object.defineProperty(process.stderr, 'isTTY', original);
+      else delete (/** @type {any} */ (process.stderr).isTTY);
+    }
+  });
 });
