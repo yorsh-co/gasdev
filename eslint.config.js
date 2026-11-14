@@ -1,7 +1,7 @@
 import { gasEslint } from './eslint/index.js';
 
 export default gasEslint(
-  { preset: 'node', ignores: ['test/fixtures/**'] },
+  { preset: 'node', ignores: ['test/fixtures/**', 'templates/gas/files/**'] },
   // The Apps Script test runtime is a global script, not a Node module.
   {
     files: ['gas-test/**/*.js'],

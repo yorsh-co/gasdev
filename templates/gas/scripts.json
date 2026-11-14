@@ -1,9 +1,7 @@
 {
   "required": {
-    "clean": "rimraf dist",
-    "release": "gasdev release",
+    "clean": "gasdev clean",
     "build:format": "npm run check && npm run build && npm run format:dist",
-    "build:release": "npm run build:format && npm run release",
     "lint": "eslint . && echo '✓ Lint passed'",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
@@ -12,6 +10,10 @@
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && gasdev check",
     "test": "vitest run",
     "test:watch": "vitest"
+  },
+  "library": {
+    "release": "gasdev release",
+    "build:release": "npm run build:format && npm run release"
   },
   "present": ["build", "build:watch", "typecheck"],
   "gasTest": {

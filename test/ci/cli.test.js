@@ -1,6 +1,6 @@
 // @ts-check
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DeployError as PublicDeployError } from 'gasdev/ci';
@@ -191,5 +191,97 @@ describe('main setup', () => {
     } finally {
       fake.cleanup();
     }
+  });
+});
+
+describe('main deploy local prompts', () => {
+  /** Builds a temp home and project, and a fake prompt answering in order. */
+  function local(/** @type {(string | undefined)[]} */ answers) {
+    const root = mkdtempSync(join(tmpdir(), 'gasdev-cli-'));
+    sandboxes.push(root);
+    const home = join(root, 'home');
+    const cwd = join(root, 'project');
+    mkdirSync(home);
+    mkdirSync(cwd);
+    writeFileSync(join(home, '.clasprc.json'), '{"token":"x"}');
+    const queue = [...answers];
+    const prompt = vi.fn(async () => ({ value: queue.shift() }));
+    return { home, cwd, prompt };
+  }
+
+  it('passes the context through unchanged without a prompt', async () => {
+    const { context } = setup();
+    vi.mocked(deploy).mockClear();
+    vi.mocked(deploy).mockResolvedValueOnce();
+    expect(await main(['deploy'], context)).toBe(0);
+    expect(deploy).toHaveBeenCalledWith(context);
+  });
+
+  it('completes credentials and IDs, then deploys with the new env', async () => {
+    const { home, cwd, prompt } = local(['script-1', 'dep-1', 'v1']);
+    writeFileSync(join(home, '.clasprc.json'), '{"tokens":{}}');
+    const { context } = setup();
+    const env = /** @type {NodeJS.ProcessEnv} */ ({});
+    vi.mocked(deploy).mockClear();
+    vi.mocked(deploy).mockResolvedValueOnce();
+    const code = await main(['deploy'], {
+      ...context,
+      env,
+      cwd,
+      home,
+      prompt,
+      readHead: () => 'abc123',
+    });
+    expect(code).toBe(0);
+    expect(prompt).toHaveBeenCalledTimes(3);
+    expect(/** @type {unknown[][]} */ (prompt.mock.calls)[2]?.[0]).toEqual(
+      expect.objectContaining({
+        message: 'Version description',
+        initial: 'abc123',
+      }),
+    );
+    expect(deploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: {
+          CLASPRC_JSON: '{"tokens":{}}',
+          GAS_SCRIPT_ID: 'script-1',
+          GAS_DEPLOYMENT_ID: 'dep-1',
+          GITHUB_SHA: 'v1',
+        },
+      }),
+    );
+    expect(env).toEqual({});
+  });
+
+  it('never prompts when GITHUB_ACTIONS is true', async () => {
+    const { home, cwd, prompt } = local([]);
+    const { context } = setup();
+    const env = { GITHUB_ACTIONS: 'true' };
+    vi.mocked(deploy).mockClear();
+    vi.mocked(deploy).mockResolvedValueOnce();
+    await main(['deploy'], { ...context, env, cwd, home, prompt });
+    expect(prompt).not.toHaveBeenCalled();
+    expect(deploy).toHaveBeenCalledWith(expect.objectContaining({ env }));
+  });
+
+  it('returns 130 and prints Cancelled. when a prompt is cancelled', async () => {
+    const { home, cwd, prompt } = local([undefined]);
+    const { context, err } = setup();
+    vi.mocked(deploy).mockClear();
+    expect(await main(['deploy'], { ...context, cwd, home, prompt })).toBe(130);
+    expect(err.join('')).toBe('Cancelled.\n');
+    expect(deploy).not.toHaveBeenCalled();
+  });
+
+  it('returns 1 with a gasdev: error when ~/.clasprc.json cannot be read', async () => {
+    const { home, cwd, prompt } = local([]);
+    rmSync(join(home, '.clasprc.json'));
+    mkdirSync(join(home, '.clasprc.json'));
+    const { context, err } = setup();
+    vi.mocked(deploy).mockClear();
+    expect(await main(['deploy'], { ...context, cwd, home, prompt })).toBe(1);
+    expect(err.join('')).toMatch(/^gasdev: Cannot read .*\.clasprc\.json/);
+    expect(prompt).not.toHaveBeenCalled();
+    expect(deploy).not.toHaveBeenCalled();
   });
 });

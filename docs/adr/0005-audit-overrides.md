@@ -1,6 +1,7 @@
 # 5. Audit overrides
 
 - Status: Accepted
+- Amended by: [ADR 0029](0029-package-json-fields.md), [ADR 0033](0033-clean-command.md)
 - Date: 2026-11-04
 
 ## Context

@@ -6,6 +6,40 @@
 
 ---
 
+## [3.2.0] - 2026-11-14
+
+### Added
+
+- gasdev's own GitHub Releases are created by `.github/workflows/release.yml` when a stable `vX.Y.Z` tag is pushed, using the matching CHANGELOG section as notes; see [ADR 0028](docs/adr/0028-github-release-workflow.md)
+- `gasdev check`, `gasdev init` and `gasdev check --fix` verify and add `type`, `prettier`, `engines.node` (a subset of gasdev's range) and the audit `overrides`, including `gaxios` when `@google/clasp` is a dependency; see [ADR 0029](docs/adr/0029-package-json-fields.md)
+- `gasdev.type` (`library`, `app` or `webapp`) and type-driven scaffolding by `gasdev init`: tsconfig and ESLint files, `.clasp.example.json`, `appsscript.example.json` and, for `app` and `webapp`, `.github/workflows/deploy.yml` pinned to the installed gasdev version; the `release` and `build:release` scripts are now required only for `library` (or unset type); see [ADR 0030](docs/adr/0030-project-type.md)
+- `gasdev check` reports a `gas-deploy.yml@vX.Y.Z` ref that differs from the installed gasdev (or a non-version ref), and `init`/`check --fix` update the version in place; see [ADR 0031](docs/adr/0031-deploy-workflow-version.md)
+- `gasdev check` treats a `gas-deploy.yml@vX.Y.Z` ref older than the installed gasdev in the same major as a warning (exit 0); newer, cross-major and non-semver refs still fail; see [ADR 0034](docs/adr/0034-older-deploy-ref-warning.md)
+- On a terminal outside GitHub Actions, `gasdev deploy` uses `~/.clasprc.json` when `CLASPRC_JSON` is unset and asks for the script ID, the deployment ID (empty: push only) and the version description (default `HEAD`), pre-filled from `.env`; nothing is saved; see [ADR 0032](docs/adr/0032-local-interactive-deploy.md)
+- On a terminal, `gasdev gas-test run` asks for a missing script ID and for the spreadsheet ID; answers apply to that run only and are not saved, and CI and piped runs are unchanged
+- `gasdev clean [<dir>]` removes a directory (default `dist`) inside the project without needing `rimraf`; see [ADR 0033](docs/adr/0033-clean-command.md)
+
+### Changed
+
+- Dev-only: `bin/gasdev.js` runs `main` only when it is the entry point (symlinks resolved), so importing it has no side effects
+- Dev-only: `npm run lint:workflows` validates every file in `.github/workflows`
+- Local `gasdev deploy` without `~/.clasprc.json` now fails before prompting, with a `clasp login` hint; the CI message is unchanged
+- `gasdev check --fix` reports `gas-deploy.yml ref downgraded to vX.Y.Z` when the existing ref is newer than the installed gasdev
+- Dev-only: CLI tests inject `readHead` instead of running `git rev-parse HEAD`
+- Dev-only: `gasdev check` reads its own version from one place (`gasdevVersion`), which now fails clearly when `version` is missing
+
+### Fixed
+
+- `gasdev gas-test run` throws `cancelled` when the script ID prompt is cancelled, and trims the entered script ID
+- Dev-only: the coverage gate in `npm run check` passes again; no test imports `bin/gasdev.js` in-process, which dropped its subprocess coverage, and the GitHub Actions prompt gate for `gas-test run` moved into `runRun`
+- Dev-only: vitest no longer collects tests from agent worktrees under `.claude/`
+- The gas template `clean` script is now `gasdev clean`, and `gasdev check` warns (not drift) on the legacy `rimraf dist` value; to migrate, change `"clean"` to `"gasdev clean"`, then run `npm uninstall rimraf`; see [ADR 0033](docs/adr/0033-clean-command.md)
+- `eslint` peer floor raised to `^10.15.0`; this is non-breaking, since npm upgrades within an existing `^10` range, and only an exact pin below 10.15.0 needs moving
+- `typescript-eslint` floor raised to `^8.72.2`
+- Upstream advisories: the `typescript-eslint` `minimatch` finding (`overrides.minimatch` stays required) and the `@google/clasp` → `zod` finding wait on upstream releases
+
+---
+
 ## [3.1.0] - 2026-11-13
 
 ### Added

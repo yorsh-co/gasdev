@@ -1,5 +1,5 @@
 // @ts-check
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import prompts from 'prompts';
@@ -231,6 +231,42 @@ describe('setup', () => {
       const cwd = createProject({ clasp: null, manifest: null });
       const error = await run(cwd, [null]).catch((e) => e);
       expect(error).toBeInstanceOf(CancelledError);
+    });
+
+    const ENV = {
+      FAKE_CLASP_USER: 'dev@example.com',
+      FAKE_CLASP_DEPLOYMENTS: DEPLOYMENTS,
+      FAKE_CLASP_SCRIPT_ID: 'script-9',
+    };
+    const manifestOf = (/** @type {string} */ cwd) =>
+      JSON.parse(readFileSync(join(cwd, 'appsscript.example.json'), 'utf8'));
+
+    it('writes the webapp block for a webapp project', async () => {
+      const cwd = createProject({
+        pkg: { gasdev: { type: 'webapp' } },
+        clasp: null,
+        manifest: null,
+      });
+      await run(cwd, [true, 'keep', 'Etc/UTC', '', true], ENV);
+      expect(manifestOf(cwd).webapp).toEqual({
+        executeAs: 'USER_DEPLOYING',
+        access: 'MYSELF',
+      });
+    });
+
+    it('writes no webapp block without a type', async () => {
+      const cwd = createProject({ clasp: null, manifest: null });
+      await run(cwd, [true, 'keep', 'Etc/UTC', '', true], ENV);
+      expect(manifestOf(cwd)).not.toHaveProperty('webapp');
+    });
+
+    it('writes no webapp block when package.json is unreadable', async () => {
+      const cwd = createProject({ clasp: null, manifest: null });
+      writeFileSync(join(cwd, 'package.json'), '{ not json');
+      await run(cwd, [true, 'keep', 'Etc/UTC', '', true], ENV).catch(
+        () => undefined,
+      );
+      expect(manifestOf(cwd)).not.toHaveProperty('webapp');
     });
 
     it('writes nothing without a package.json', async () => {

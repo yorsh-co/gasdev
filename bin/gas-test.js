@@ -317,11 +317,16 @@ function formatResults(results, elapsedMs) {
  * contents are replaced.
  *
  * @param {string} cwd Project root.
- * @param {{ keep?: boolean }} options `keep` leaves the temporary project in place.
- * @returns {number} 1 when a test failed or no results came back, else 0.
- * @throws {GasTestError} On an unusable project or a clasp failure.
+ * @param {{ keep?: boolean, prompt?: ((question: import('prompts').PromptObject) => Promise<Record<string, any>>) | undefined }} options
+ *   `keep` leaves the temporary project in place. `prompt` is a `prompts`-compatible
+ *   function that asks for a missing script ID and the spreadsheet ID; answers apply to this run only.
+ *   It is ignored on GitHub Actions.
+ * @returns {Promise<number>} 1 when a test failed or no results came back, else 0.
+ * @throws {GasTestError} On an unusable project, a cancelled prompt or a clasp failure.
  */
-export function runRun(cwd, { keep = false }) {
+export async function runRun(cwd, { keep = false, prompt: givenPrompt } = {}) {
+  const prompt =
+    process.env['GITHUB_ACTIONS'] === 'true' ? undefined : givenPrompt;
   const config = loadConfig(cwd);
   if (!config.gasTest) {
     throw new GasTestError(
@@ -329,13 +334,42 @@ export function runRun(cwd, { keep = false }) {
     );
   }
   const { scopes } = config.gasTest;
-  const scriptId = process.env['GAS_TEST_SCRIPT_ID'] || config.gasTest.scriptId;
+  let scriptId = process.env['GAS_TEST_SCRIPT_ID'] || config.gasTest.scriptId;
+  if (!scriptId && prompt) {
+    const answer = await prompt({
+      type: 'text',
+      name: 'scriptId',
+      message: 'Test project script ID',
+      validate: (/** @type {string} */ v) =>
+        /^[A-Za-z0-9_-]+$/.test(v) || 'Enter a valid script ID',
+    });
+    if (answer['scriptId'] === undefined) {
+      throw new GasTestError('cancelled');
+    }
+    scriptId = String(answer['scriptId']).trim();
+  }
   if (!scriptId) {
     throw new GasTestError(
       'no script ID: set GAS_TEST_SCRIPT_ID or "gasdev.gasTest.scriptId"',
     );
   }
-  const spreadsheetId = process.env['GAS_TEST_SPREADSHEET_ID'] || undefined;
+  let spreadsheetId = process.env['GAS_TEST_SPREADSHEET_ID'] || undefined;
+  if (process.env['GAS_TEST_SPREADSHEET_ID'] === undefined && prompt) {
+    const answer = await prompt({
+      type: 'text',
+      name: 'spreadsheetId',
+      message:
+        'Test spreadsheet ID (empty: use the GAS_TEST_SPREADSHEET_ID Script Property)',
+      validate: (/** @type {string} */ v) =>
+        v === '' ||
+        /^[A-Za-z0-9_-]+$/.test(v) ||
+        'Enter a valid spreadsheet ID or leave empty',
+    });
+    if (answer['spreadsheetId'] === undefined) {
+      throw new GasTestError('cancelled');
+    }
+    spreadsheetId = answer['spreadsheetId'] || undefined;
+  }
   const code = buildGasTest(cwd, config);
   const bin = claspBin(cwd);
 

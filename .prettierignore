@@ -4,3 +4,5 @@ node_modules
 .claude/plans
 .claude/handoff
 test/fixtures/
+templates/gas/
+templates/node/

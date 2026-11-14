@@ -5,6 +5,7 @@ import { delimiter, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MISSING_GH, ReleaseError } from '../../src/release/errors.js';
 import {
+  changelogSection,
   createRelease,
   findRelease,
   githubRepo,
@@ -186,6 +187,29 @@ describe('releaseNotes', () => {
   it('falls back to the tag name without a section or annotation', () => {
     const { root } = createProject();
     expect(releaseNotes(root, '1.0.0')).toBe('v1.0.0');
+  });
+});
+
+describe('changelogSection', () => {
+  it('returns the section without heading or trailing rule', () => {
+    const { root } = createProject({
+      files: {
+        'CHANGELOG.md':
+          '# Changelog\n\n## [1.1.0] - 2026-02-01\n\n- newer\n\n---\n\n## [1.0.0]\n\n- first\n',
+      },
+    });
+    expect(changelogSection(root, '1.1.0')).toBe('- newer');
+  });
+
+  it('returns an empty string when the section is missing', () => {
+    const { root } = createProject();
+    expect(changelogSection(root, '2.0.0')).toBe('');
+  });
+
+  it('returns an empty string without a CHANGELOG', () => {
+    const { root } = createProject();
+    rmSync(join(root, 'CHANGELOG.md'));
+    expect(changelogSection(root, '1.0.0')).toBe('');
   });
 });
 

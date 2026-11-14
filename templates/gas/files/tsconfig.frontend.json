@@ -1,0 +1,8 @@
+{
+  "extends": "gasdev/tsconfig/web.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/web/**/*.ts"]
+}

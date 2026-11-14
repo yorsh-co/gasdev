@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // @ts-check
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import prompts from 'prompts';
 import pkg from '../package.json' with { type: 'json' };
 import { main as bundleMain } from '../src/bundle/cli.js';
 import { main as ciMain } from '../src/ci/cli.js';
@@ -8,10 +11,12 @@ import { main as releaseMain } from '../src/release/cli.js';
 import {
   CheckError,
   checkProject,
+  chooseProjectType,
   formatReport,
   initProject,
   loadConfig,
 } from './check.js';
+import { CleanError, runClean } from './clean.js';
 import { DevError, runDev } from './dev.js';
 import { GasTestError, runBuild, runRun } from './gas-test.js';
 import { GithubError, runGithub } from './github.js';
@@ -40,6 +45,7 @@ const USAGE = `Usage: gasdev check [--fix]
        gasdev setup
        gasdev deploy
        gasdev peers sync [--check]
+       gasdev clean [<dir>]
 
 Reports drift of .gitignore, .prettierignore, .github/dependabot.yml and the
 standard package.json scripts from the preset templates. Writes only with --fix
@@ -81,6 +87,8 @@ Commands:
                    "peers" entry from the peer's highest release tag that
                    satisfies its range (without the @version line); needs
                    network access
+  clean [<dir>]    Remove <dir> (default: dist) inside the project; succeeds when
+                   absent
 
 Options:
   -h, --help       Show this help
@@ -119,6 +127,7 @@ export async function main(argv) {
       stderr: process.stderr,
       env: process.env,
       cwd: process.cwd(),
+      prompt: process.stdin.isTTY && process.stdout.isTTY ? prompts : undefined,
     });
   }
   let parsed;
@@ -153,6 +162,7 @@ export async function main(argv) {
   const isHtml = command === 'html' && rest.length === 0;
   const isDev = command === 'dev' && rest.length === 0;
   const isPeers = command === 'peers' && rest.join(' ') === 'sync';
+  const isClean = command === 'clean' && rest.length <= 1;
   if (
     !isCheck &&
     !isInit &&
@@ -161,7 +171,8 @@ export async function main(argv) {
     !isRun &&
     !isHtml &&
     !isDev &&
-    !isPeers
+    !isPeers &&
+    !isClean
   ) {
     return usageError(`unknown command: ${positionals.join(' ')}.`);
   }
@@ -186,6 +197,7 @@ export async function main(argv) {
     return usageError('--fix is only valid with check or github.');
   }
   try {
+    if (isClean) return runClean(process.cwd(), rest[0]);
     if (isGithub) return runGithub({ fix: values.fix === true });
     if (isHtml) {
       const { html } = loadConfig(process.cwd());
@@ -200,10 +212,33 @@ export async function main(argv) {
       return runPeers(process.cwd(), peers, { check: values.check === true });
     }
     if (isBuild) return runBuild(process.cwd(), { out: values.out });
-    if (isRun) return runRun(process.cwd(), { keep: values.keep === true });
+    if (isRun) {
+      return await runRun(process.cwd(), {
+        keep: values.keep === true,
+        prompt:
+          process.stdin.isTTY && process.stdout.isTTY ? prompts : undefined,
+      });
+    }
     const fixed = isInit || values.fix === true;
     if (fixed) {
-      for (const message of initProject(process.cwd())) {
+      /** @type {string | undefined} */
+      let type;
+      if (isInit) {
+        const config = loadConfig(process.cwd());
+        if (config.preset === 'gas' && config.type === undefined) {
+          if (process.stdin.isTTY && process.stdout.isTTY) {
+            type = await chooseProjectType(prompts);
+          } else {
+            process.stdout.write(
+              'gasdev.type is not set; set it in package.json (library, app or webapp) and rerun init\n',
+            );
+          }
+        }
+      }
+      for (const message of initProject(process.cwd(), {
+        type,
+        init: isInit,
+      })) {
         process.stdout.write(`${message}\n`);
       }
     }
@@ -215,6 +250,7 @@ export async function main(argv) {
   } catch (error) {
     if (
       error instanceof CheckError ||
+      error instanceof CleanError ||
       error instanceof DevError ||
       error instanceof GasTestError ||
       error instanceof GithubError ||
@@ -228,4 +264,20 @@ export async function main(argv) {
   }
 }
 
-process.exitCode = await main(process.argv.slice(2));
+/**
+ * Tells whether this module is the process entry point, following symlinks
+ * such as the one npm creates in node_modules/.bin.
+ *
+ * @returns {boolean} False when the entry script is missing or unresolvable.
+ */
+function isEntryPoint() {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return realpathSync(entry) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) process.exitCode = await main(process.argv.slice(2));

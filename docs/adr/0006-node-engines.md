@@ -1,7 +1,7 @@
 # 6. Node engines
 
 - Status: Accepted
-- Amended by: [ADR 0021](0021-node-22-15-floor.md)
+- Amended by: [ADR 0021](0021-node-22-15-floor.md), [ADR 0029](0029-package-json-fields.md)
 - Date: 2026-11-04
 
 ## Context

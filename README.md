@@ -104,6 +104,7 @@ The connection is metadata: `loadOrder` in gas-lock's `gasdev` key becomes `gasL
 - **Git-flow release branch**: the `release/X.Y.Z` branch where a version is prepared before it is merged and tagged. It is not the dist branch.
 - **Drift**: a difference between your project and the template that `gasdev check` compares it with.
 - **Preset**: the project type in `gasdev.preset`: `gas` (the default) for Apps Script TypeScript projects, or `node` for plain JavaScript Node tooling. It selects the templates and the keys that `gasdev check` accepts.
+- **Project type**: `gasdev.type` (gas preset only, optional): `library` (consumed by other Apps Script projects, released with `gasdev release`), `app` (a deployed Apps Script project) or `webapp` (an `app` also redeployed as a web app). `gasdev init` prompts for it when unset and persists it; `check` validates it.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -113,7 +114,7 @@ The connection is metadata: `loadOrder` in gas-lock's `gasdev` key becomes `gasL
 
 - Node.js ^22.15.0, ^24.0.0 or >=26.0.0
 - Peer dependencies, which stay direct dev dependencies of your project so their binaries are linked:
-  - `eslint` `^10.7.0`
+  - `eslint` `^10.15.0`
   - `prettier` `^3.9.6`
   - `typescript` `^5.9.3`
   - `@google/clasp` `^3.4.1`, optional: needed by `gasdev gas-test run`, `gasdev setup` and `gasdev deploy`
@@ -129,8 +130,9 @@ Add it to your project's `package.json` as a dev dependency, using a semver rang
 ```json
 {
   "devDependencies": {
-    "gasdev": "github:yorsh-co/gasdev#semver:^3.0.0",
-    "eslint": "^10.7.0",
+    "gasdev": "github:yorsh-co/gasdev#semver:^3.2.0",
+    "eslint": "^10.15.0",
+    "vitest": "^5.1.0",
     "prettier": "^3.9.6",
     "typescript": "^5.9.3",
     "@types/google-apps-script": "^2.0.13",
@@ -141,15 +143,20 @@ Add it to your project's `package.json` as a dev dependency, using a semver rang
 
 `@eslint/js`, `typescript-eslint`, `eslint-config-prettier` and `globals` are dependencies of `gasdev`, so a new project does not add them to its own `devDependencies`.
 
+### Known audit findings
+
+- `typescript-eslint` 8.72.2 and earlier still depend on `minimatch` 10, which has advisory GHSA-g3hv-75wg-m249. The `overrides.minimatch` entry that `gasdev check` requires stays until a stable release moves to `minimatch` 11.
+- `@google/clasp` 3.4.1 (the latest release) depends on `zod` 3, so a `zod` finding remains. It waits on a Google release, and the clasp peer floor goes up once one ships. No override is added for it (accepted risk, see [ADR 0005](docs/adr/0005-audit-overrides.md)).
+
 ### Quick start
 
 For a new project:
 
 1. Add `gasdev` and its npm peer dependencies (`eslint`, `prettier`, `typescript`, and `@google/clasp` if you use it) as dev dependencies (see [Requirements](#requirements) and [Install](#install)), then run `npm install`.
-2. For plain JavaScript tooling, set `"gasdev": { "preset": "node" }` in `package.json`.
-3. Run `npx gasdev init` to create the ignore files, `.github/dependabot.yml`, the missing required scripts and placeholders for `build`, `build:watch` and `typecheck`.
-4. Add the config `init` does not create: [Prettier](#prettier), [TypeScript](#typescript) and [ESLint](#eslint). Replace the `build`, `build:watch` and `typecheck` placeholders with the project's commands, and add `rimraf` as a dev dependency for the `clean` script.
-5. Run `npm install` again to install the dependencies you added in step 4 (including `rimraf`), then `npm run check`.
+2. For plain JavaScript tooling, set `"gasdev": { "preset": "node" }` in `package.json`. For an Apps Script project, optionally set `"gasdev": { "type": "library" }` (or `"app"`, `"webapp"`); `init` asks for it in a terminal when it is unset and saves the answer. Without a terminal it prints a note and skips the type-driven setup.
+3. Run `npx gasdev init` to create the ignore files, `.github/dependabot.yml`, the missing `package.json` fields (`type`, `prettier`, `engines.node`, `overrides`), the missing required scripts and placeholders for `build`, `build:watch` and `typecheck`.
+4. When the type is known, `init` also creates `tsconfig.json`, `tsconfig.test.json` and `eslint.config.js` (plus `gas-test/tsconfig.json` when `gasdev.gasTest` is configured, and `tsconfig.frontend.json` with a `web` ESLint block for `webapp`), each only when absent; see [TypeScript](#typescript) and [ESLint](#eslint) to adjust them. `check --fix` does not create them. Replace the `build`, `build:watch` and `typecheck` placeholders with the project's commands.
+5. Run `npm install` again to install the dependencies you added in step 4, then `npm run check`.
 
 For an existing project, follow [Migrating an existing project](#migrating-an-existing-project).
 
@@ -403,12 +410,14 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
 
 ### What is checked
 
-| File                     | Rule                                                                                                                                                                                                               |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `.gitignore`             | Every line of the template is present. Extra lines, blanks and comments are allowed                                                                                                                                |
-| `.prettierignore`        | Every line of the template is present. Extra lines, blanks and comments are allowed                                                                                                                                |
-| `.github/dependabot.yml` | Equals the template (ignoring trailing whitespace and final newlines)                                                                                                                                              |
-| `package.json` `scripts` | Required scripts have exactly the template value; present scripts must exist with any value, and the `init` placeholder is a warning. With `gasTest` configured, `test:gas:build` and `test:gas` are also required |
+| File                      | Rule                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.gitignore`              | Every line of the template is present. Extra lines, blanks and comments are allowed                                                                                                                                                                                                                                                                                                                                                         |
+| `.prettierignore`         | Every line of the template is present. Extra lines, blanks and comments are allowed                                                                                                                                                                                                                                                                                                                                                         |
+| `.github/workflows/*.yml` | Any `gas-deploy.yml@vX.Y.Z` ref equals the installed `gasdev` version, or is older in the same major (warning, [ADR 0034](docs/adr/0034-older-deploy-ref-warning.md)); skipped in gasdev itself; `--fix` rewrites it                                                                                                                                                                                                                        |
+| `.github/dependabot.yml`  | Equals the template (ignoring trailing whitespace and final newlines)                                                                                                                                                                                                                                                                                                                                                                       |
+| `package.json` fields     | `type` is `"module"`; `prettier` is `"gasdev/prettier"` (not checked in gasdev itself); `engines.node` is present and a subset of gasdev's own `engines.node` range; `overrides` has gasdev's `minimatch` entry, plus the `gaxios` entry when `@google/clasp` is a dependency (extra overrides are ignored). `init` and `check --fix` add the missing ones and never change an existing value; run `npm install` after an override is added |
+| `package.json` `scripts`  | Required scripts have exactly the template value; present scripts must exist with any value, and the `init` placeholder is a warning. With `gasTest` configured, `test:gas:build` and `test:gas` are also required                                                                                                                                                                                                                          |
 
 Required lines per preset:
 
@@ -417,11 +426,11 @@ Required lines per preset:
 | `.gitignore`      | `node_modules/`, `dist/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` | `node_modules/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` |
 | `.prettierignore` | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`                       | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`              |
 
-Required scripts, exact values, for the `gas` preset. They assume `rimraf` is a dev dependency of the project:
+Required scripts, exact values, for the `gas` preset. `release` and `build:release` are required for `library` projects (or when `gasdev.type` is unset) only:
 
 | Script          | Value                                                                                       |
 | --------------- | ------------------------------------------------------------------------------------------- |
-| `clean`         | `rimraf dist`                                                                               |
+| `clean`         | `gasdev clean`                                                                              |
 | `release`       | `gasdev release`                                                                            |
 | `build:format`  | `npm run check && npm run build && npm run format:dist`                                     |
 | `build:release` | `npm run build:format && npm run release`                                                   |
@@ -433,6 +442,8 @@ Required scripts, exact values, for the `gas` preset. They assume `rimraf` is a 
 | `check`         | `npm run format:check && npm run lint && npm run typecheck && npm run test && gasdev check` |
 | `test`          | `vitest run`                                                                                |
 | `test:watch`    | `vitest`                                                                                    |
+
+A `clean` script still set to `rimraf dist` is reported as a warning, not drift: change it to `gasdev clean`, then run `npm uninstall rimraf`. `check --fix` does not rewrite it.
 
 The `gas` preset also requires `build`, `build:watch` and `typecheck` to exist, with any value; the placeholder that `init` and `check --fix` add is reported as a warning. With `gasTest` configured it also requires `test:gas:build` (`gasdev gas-test build`) and `test:gas` (`gasdev gas-test run`).
 
@@ -648,7 +659,7 @@ With `gasTest` configured, `gasdev check` requires these scripts with exactly th
 1. Create a dedicated Apps Script project and link it to a standard Google Cloud project (project settings), which `clasp run` requires.
 2. Install clasp (see [Requirements](#requirements)). `gas-test run` runs the clasp from the project's `node_modules`, not from `PATH`.
 3. Authorize the scopes: `npx clasp login --extra-scopes <comma-separated gasTest.scopes>`.
-4. Set `GAS_TEST_SCRIPT_ID` (or `gasTest.scriptId`) and, optionally, `GAS_TEST_SPREADSHEET_ID`.
+4. Set `GAS_TEST_SCRIPT_ID` (or `gasTest.scriptId`) and, optionally, `GAS_TEST_SPREADSHEET_ID`. On a terminal, `gas-test run` asks for a missing script ID and for the spreadsheet ID; answers are not saved.
 
 #### Running from the editor
 
@@ -911,6 +922,14 @@ Use `gasdev peers sync [--check]` in a library with peers: it keeps `src/interna
   }
 }
 ```
+
+### Clean
+
+Use `gasdev clean [<dir>]` to remove a build directory. It is the `clean` script of the `gas` preset.
+
+- `<dir>` defaults to `dist`, and a missing directory is not an error.
+- It works the same on every platform and needs no other dependency.
+- It refuses the project root and any path outside it, including a path that leaves the project through a symlink (exit 1).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -1200,7 +1219,7 @@ The workflow runs `gasdev` with `npx --no-install`, so a missing dependency fail
 { "scripts": { "deploy:setup": "gasdev setup" } }
 ```
 
-The workflow is referenced by an exact tag (`@v3.0.0`) and `gasdev` by a semver range (`#semver:^3.0.0`). They are fetched separately: the workflow definition by GitHub when the job starts, `gasdev` by `npm ci` from your lockfile. Keep them on the same version.
+The workflow is referenced by an exact tag (`@v3.0.0`) and `gasdev` by a semver range (`#semver:^3.0.0`). They are fetched separately: the workflow definition by GitHub when the job starts, `gasdev` by `npm ci` from your lockfile. They must be on the same version. `gasdev check` compares the workflow ref with the installed `gasdev` version and reports a mismatch, and `gasdev check --fix` (or `init`) rewrites the `vX.Y.Z` in place. Refs that are not `vX.Y.Z` (a branch or SHA) are reported but never rewritten. A `vX.Y.Z` ref that is older than the installed version in the same major is only a warning, because the workflow runs your installed `gasdev`; a newer ref, a different major or a non-semver ref fails. A Dependabot bump within a major therefore passes `check`, while a major bump needs `gasdev check --fix` and the committed result. See [ADR 0031](docs/adr/0031-deploy-workflow-version.md) and [ADR 0034](docs/adr/0034-older-deploy-ref-warning.md).
 
 ### Setup
 
@@ -1212,7 +1231,7 @@ Enable the [Apps Script API](https://script.google.com/home/usersettings) for th
 
 #### 2. Commit the clasp and manifest templates
 
-Commit `.clasp.example.json` and `appsscript.example.json` at the project root. If either is missing, `gasdev setup` offers to create it with defaults (`{ "rootDir": "dist" }` and a V8 manifest with `STACKDRIVER` exception logging and empty `oauthScopes`, without a `webapp` block); review the files (`rootDir`, `oauthScopes`, the `webapp` block) and commit them. `gasdev deploy` still requires both and never creates them. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
+Commit `.clasp.example.json` and `appsscript.example.json` at the project root. `gasdev init` creates both for `app` and `webapp` projects (not `library`); declare the scopes in `appsscript.example.json` `oauthScopes`. A `webapp` manifest also gets a `webapp` block with `executeAs: USER_DEPLOYING` and `access: MYSELF`; widen it deliberately. If either is missing, `gasdev setup` offers to create it with defaults (`{ "rootDir": "dist" }` and a V8 manifest with `STACKDRIVER` exception logging and empty `oauthScopes`; the `webapp` block is omitted unless `gasdev.type` is `webapp`); review the files (`rootDir`, `oauthScopes`, the `webapp` block) and commit them. `gasdev deploy` still requires both and never creates them. `.clasp.example.json` is the base of `.clasp.json`, without `scriptId`; `appsscript.example.json` is the base of the manifest. The optional `rootDir` in `.clasp.example.json` (relative, no `..`) is where the build writes `appsscript.json`:
 
 ```json
 { "rootDir": "dist" }
@@ -1240,7 +1259,7 @@ Manually in the editor:
 
 `deploy:setup` writes the IDs to `.env` and has no per-environment option, so record them before running it again for the next environment.
 
-Libraries and bound scripts need only the script ID; see [Project types](#project-types). Use a separate script per environment.
+`library` and `app` projects (including bound scripts) need only the script ID; see [Project types](#project-types). Use a separate script per environment.
 
 #### 5. Create the GitHub environment restricted to its branch
 
@@ -1306,6 +1325,10 @@ The wizard runs these steps in order:
 | `1`   | Failed deployment |
 | `2`   | Invalid usage     |
 | `130` | Cancelled         |
+
+#### Local deploy
+
+On a terminal, `gasdev deploy` uses `~/.clasprc.json` when `CLASPRC_JSON` is unset, and asks for the script ID, the deployment ID (empty means push only) and the version description (default: HEAD). Answers are pre-filled from `.env`. Nothing is saved. Without `~/.clasprc.json` the command stops before asking anything and tells you to run `clasp login`. In CI (no TTY, or `GITHUB_ACTIONS=true`) behaviour is unchanged. See [ADR 0032](docs/adr/0032-local-interactive-deploy.md).
 
 #### Wizard configuration
 
@@ -1451,6 +1474,10 @@ jobs:
 
 `develop` deploys to the `dev` environment and `main` to `live`. `secrets: inherit` is enough: the secret is resolved from the environment the job runs in.
 
+#### CI deployment
+
+For `app` and `webapp` projects, `gasdev init` creates `.github/workflows/deploy.yml` (only when absent) pinned to the installed gasdev version. Pushing `develop` deploys `dev` and pushing `main` deploys `live`, so create both [environments](#environments) before the first push. Personal dev copies of the script keep using the local `.clasp.json` written by `gasdev setup`.
+
 #### Environments
 
 | Environment | Branch    | Secret         | Variables                            |
@@ -1462,10 +1489,11 @@ The IDs are variables, not secrets, on purpose: GitHub drops job outputs that co
 
 #### Project types
 
-| Project               | `GAS_DEPLOYMENT_ID` | Result                                   |
-| --------------------- | ------------------- | ---------------------------------------- |
-| Web app               | set                 | Scope check, push, new version, redeploy |
-| Library, bound script | not set             | Push only                                |
+| `gasdev.type`       | `GAS_DEPLOYMENT_ID` | Result                                       |
+| ------------------- | ------------------- | -------------------------------------------- |
+| `webapp`            | set                 | Scope check, push, new version, redeploy     |
+| `app`, bound script | not set             | Push only                                    |
+| `library`           | not applicable      | Released with `gasdev release`, not deployed |
 
 `GAS_DEPLOYMENT_ID` must be a versioned web app deployment, not the HEAD deployment.
 
@@ -1559,6 +1587,7 @@ Run `npm run check` before opening a pull request. It runs the format check, lin
 - `npm run test:network` runs the network tests (`GASDEV_NETWORK=1`).
 - `npm run lint:workflows` validates the workflows and needs `action-validator`.
 - Decisions are recorded in `docs/adr/`.
+- Pushing a `vX.Y.Z` tag creates the GitHub Release from the matching `CHANGELOG.md` section through `.github/workflows/release.yml`. Prerelease tags are skipped, and the tag must match `package.json` `version` ([ADR 0028](docs/adr/0028-github-release-workflow.md)).
 - Commits follow Conventional Commits.
 - Update `CHANGELOG.md` with every user-facing change.
 

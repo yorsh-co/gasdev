@@ -1,6 +1,7 @@
 # 23. Setup creates the clasp and manifest templates
 
 - Status: Accepted
+- Superseded in part by: [ADR 0030](0030-project-type.md)
 - Date: 2026-11-10
 
 ## Context
