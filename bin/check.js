@@ -87,6 +87,9 @@ const SELF_BIN = 'node bin/gasdev.js';
 /** Coverage-gated test step this package runs in place of `npm run test`. */
 const SELF_TEST = 'npm run test:coverage';
 
+/** Pre-`gasdev clean` value of the `clean` script, reported as a warning instead of drift. */
+const LEGACY_CLEAN = 'rimraf dist';
+
 /**
  * @typedef {object} Drift
  * @property {string} file Project file the drift belongs to.
@@ -606,6 +609,12 @@ function checkScripts(pkg, preset, gasTest, type) {
       drift.push({
         file,
         message: `scripts.${name} is missing; expected: ${expected}`,
+      });
+    } else if (name === 'clean' && found === LEGACY_CLEAN) {
+      drift.push({
+        file,
+        message: `scripts.clean uses rimraf; change it to "${expected}", then run npm uninstall rimraf`,
+        warning: true,
       });
     } else if (found !== expected) {
       drift.push({

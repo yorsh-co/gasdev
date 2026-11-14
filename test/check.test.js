@@ -498,6 +498,38 @@ describe('gasdev overrides', () => {
   });
 });
 
+describe('check (clean script)', () => {
+  it('warns about the legacy rimraf clean script without failing', () => {
+    const dir = createCleanProject('gas');
+    const pkg = readPackage(dir);
+    pkg.scripts.clean = 'rimraf dist';
+    writePackage(dir, pkg);
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      'warning: scripts.clean uses rimraf; change it to "gasdev clean", then run npm uninstall rimraf',
+    );
+  });
+
+  it('does not warn when clean is gasdev clean', () => {
+    const result = run(createCleanProject('gas'), ['check']);
+    expect(result.status).toBe(0);
+    expect(result.stdout + result.stderr).not.toContain('rimraf');
+  });
+
+  it('reports any other clean value as drift', () => {
+    const dir = createCleanProject('gas');
+    const pkg = readPackage(dir);
+    pkg.scripts.clean = 'rm -rf dist';
+    writePackage(dir, pkg);
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'scripts.clean differs; expected: gasdev clean; found: "rm -rf dist"',
+    );
+  });
+});
+
 describe('check (placeholder scripts)', () => {
   const PRESENT = ['build', 'build:watch', 'typecheck'];
 
