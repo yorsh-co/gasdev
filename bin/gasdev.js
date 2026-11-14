@@ -121,6 +121,7 @@ export async function main(argv) {
       stderr: process.stderr,
       env: process.env,
       cwd: process.cwd(),
+      prompt: process.stdin.isTTY && process.stdout.isTTY ? prompts : undefined,
     });
   }
   let parsed;

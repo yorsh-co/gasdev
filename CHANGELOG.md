@@ -10,10 +10,13 @@
 - `gasdev check`, `gasdev init` and `gasdev check --fix` verify and add `type`, `prettier`, `engines.node` (a subset of gasdev's range) and the audit `overrides`, including `gaxios` when `@google/clasp` is a dependency; see [ADR 0029](docs/adr/0029-package-json-fields.md)
 - `gasdev.type` (`library`, `app` or `webapp`) and type-driven scaffolding by `gasdev init`: tsconfig and ESLint files, `.clasp.example.json`, `appsscript.example.json` and, for `app` and `webapp`, `.github/workflows/deploy.yml` pinned to the installed gasdev version; the `release` and `build:release` scripts are now required only for `library` (or unset type); see [ADR 0030](docs/adr/0030-project-type.md)
 - `gasdev check` reports a `gas-deploy.yml@vX.Y.Z` ref that differs from the installed gasdev (or a non-version ref), and `init`/`check --fix` update the version in place; see [ADR 0031](docs/adr/0031-deploy-workflow-version.md)
+- On a terminal outside GitHub Actions, `gasdev deploy` uses `~/.clasprc.json` when `CLASPRC_JSON` is unset and asks for the script ID, the deployment ID (empty: push only) and the version description (default `HEAD`), pre-filled from `.env`; nothing is saved; see [ADR 0032](docs/adr/0032-local-interactive-deploy.md)
 
 ### Changed
 
 - Dev-only: `npm run lint:workflows` validates every file in `.github/workflows`
+- Local `gasdev deploy` without `~/.clasprc.json` now fails before prompting, with a `clasp login` hint; the CI message is unchanged
+- Dev-only: CLI tests inject `readHead` instead of running `git rev-parse HEAD`
 
 ---
 
