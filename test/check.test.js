@@ -10,6 +10,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import semver from 'semver';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   CheckError,
@@ -1714,6 +1715,7 @@ describe('check (gas-deploy workflow ref)', () => {
   const VERSION = JSON.parse(
     readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
   ).version;
+  const MAJOR = semver.major(VERSION);
   const WF = '.github/workflows/deploy.yml';
   const workflow = (/** @type {string} */ ref, eol = '\n') =>
     [
@@ -1758,6 +1760,28 @@ describe('check (gas-deploy workflow ref)', () => {
     );
     expect(fixed.status).toBe(0);
     expect(readFileSync(join(dir, WF), 'utf8')).toBe(workflow(`v${VERSION}`));
+  });
+
+  it('warns on an older ref in the same major and --fix rewrites it', () => {
+    const ref = `v${MAJOR}.0.0-alpha.0`;
+    const dir = make(workflow(ref));
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      `warning: uses gas-deploy.yml@${ref}; installed gasdev is ${VERSION}`,
+    );
+    expect(result.stdout).toContain('with 1 warning(s)');
+    const fixed = run(dir, ['check', '--fix']);
+    expect(fixed.status).toBe(0);
+    expect(readFileSync(join(dir, WF), 'utf8')).toBe(workflow(`v${VERSION}`));
+  });
+
+  it('fails on a newer ref in the same major', () => {
+    const ref = `v${MAJOR}.999.0`;
+    const result = run(make(workflow(ref)), ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`uses gas-deploy.yml@${ref}`);
+    expect(result.stderr).not.toContain(`warning: uses gas-deploy.yml@${ref}`);
   });
 
   it('preserves CRLF line endings when fixing', () => {
