@@ -192,6 +192,14 @@ describe('gas-test run prompts', () => {
     expect(entries()).toEqual([]);
   });
 
+  it('marks the spreadsheet ID prompt as optional', async () => {
+    const { prompt, calls } = fakePrompt([{ spreadsheetId: '' }]);
+    await runRun(createProject('config-script'), { prompt });
+    expect(calls[0]?.message).toBe(
+      'Test spreadsheet ID (optional, press Enter to skip)',
+    );
+  });
+
   it('validates the spreadsheet ID answer', async () => {
     const { prompt, calls } = fakePrompt([{ spreadsheetId: '' }]);
     await runRun(createProject('config-script'), { prompt });

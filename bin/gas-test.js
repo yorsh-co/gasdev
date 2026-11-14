@@ -358,8 +358,7 @@ export async function runRun(cwd, { keep = false, prompt: givenPrompt } = {}) {
     const answer = await prompt({
       type: 'text',
       name: 'spreadsheetId',
-      message:
-        'Test spreadsheet ID (empty: use the GAS_TEST_SPREADSHEET_ID Script Property)',
+      message: 'Test spreadsheet ID (optional, press Enter to skip)',
       validate: (/** @type {string} */ v) =>
         v === '' ||
         /^[A-Za-z0-9_-]+$/.test(v) ||
