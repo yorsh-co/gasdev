@@ -349,6 +349,27 @@ describe.each(['gas', 'node'])('check (%s preset)', (preset) => {
       expect(readPackage(dir).scripts.lint).toBe(expected);
     });
 
+    it('adds missing type, engines and overrides', () => {
+      const dir = make();
+      const pkg = readPackage(dir);
+      delete pkg.type;
+      delete pkg.engines;
+      delete pkg.overrides;
+      writePackage(dir, pkg);
+      const result = run(dir, ['check', '--fix']);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('package.json: added type');
+      expect(result.stdout).toContain('package.json: added engines.node');
+      expect(result.stdout).toContain(
+        'package.json: added overrides.minimatch',
+      );
+      const fixed = readPackage(dir);
+      expect(fixed.type).toBe('module');
+      expect(fixed.engines).toEqual({ node: GASDEV_NODE });
+      expect(fixed.overrides).toEqual({ minimatch: '^11.0.1' });
+      expect(run(dir, ['check']).status).toBe(0);
+    });
+
     it('creates a missing dependabot.yml', () => {
       const dir = make();
       rmSync(join(dir, '.github', 'dependabot.yml'));
@@ -392,11 +413,18 @@ describe.each(['gas', 'node'])(
       expect(run(dir, ['check']).status).toBe(0);
     });
 
-    it.each(['>=20', 'not a range'])('reports engines.node %s', (node) => {
+    it.each(['>=20', 'not a range', 24])('reports engines.node %s', (node) => {
       const dir = make({ engines: { node } });
       expect(drift(dir)).toContain(
-        `engines.node "${node}" is not within gasdev's`,
+        `engines.node ${JSON.stringify(node)} is not within gasdev's`,
       );
+    });
+
+    it('reports engines that is not an object', () => {
+      const dir = make({ engines: '>=22' });
+      const output = drift(dir);
+      expect(output).toContain('engines must be an object');
+      expect(output).not.toContain('engines.node is missing');
     });
 
     it('exempts gasdev itself from prettier', () => {
@@ -1046,6 +1074,18 @@ describe('init', () => {
       expect(pkg.type).toBe('commonjs');
       expect(pkg.prettier).toEqual({ semi: false });
       expect(pkg.engines).toEqual({ npm: '>=10', node: GASDEV_NODE });
+    });
+
+    it('does not add prettier to gasdev itself', () => {
+      const dir = createEmptyProject(p, { name: 'gasdev' });
+      run(dir, ['init']);
+      expect(readPackage(dir).prettier).toBeUndefined();
+    });
+
+    it('keeps a non-string engines.node', () => {
+      const dir = createEmptyProject(p, { engines: { node: 24 } });
+      run(dir, ['init']);
+      expect(readPackage(dir).engines).toEqual({ node: 24 });
     });
 
     it('keeps an existing engines.node', () => {

@@ -686,9 +686,11 @@ function checkPackageFields(pkg, preset) {
     }
   }
   const range = gasdevNodeRange();
-  const engines = isRecord(pkg['engines']) ? pkg['engines'] : {};
-  const found = engines['node'];
-  if (found === undefined) {
+  const engines = pkg['engines'];
+  const found = isRecord(engines) ? engines['node'] : undefined;
+  if (engines !== undefined && !isRecord(engines)) {
+    drift.push({ file, message: 'engines must be an object' });
+  } else if (found === undefined) {
     drift.push({
       file,
       message: `engines.node is missing; expected: ${JSON.stringify(range)}`,
