@@ -43,6 +43,7 @@ function sandbox() {
     env: /** @type {NodeJS.ProcessEnv} */ ({}),
     cwd,
     home,
+    readHead: () => undefined,
     createClasp: /** @type {typeof createClasp} */ (
       (options) =>
         createClasp({

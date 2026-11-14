@@ -235,7 +235,10 @@ describe('main deploy local prompts', () => {
     expect(code).toBe(0);
     expect(prompt).toHaveBeenCalledTimes(3);
     expect(/** @type {unknown[][]} */ (prompt.mock.calls)[2]?.[0]).toEqual(
-      expect.objectContaining({ initial: 'abc123' }),
+      expect.objectContaining({
+        message: 'Version description',
+        initial: 'abc123',
+      }),
     );
     expect(deploy).toHaveBeenCalledWith(
       expect.objectContaining({
