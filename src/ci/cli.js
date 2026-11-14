@@ -2,6 +2,7 @@
 import pkg from '../../package.json' with { type: 'json' };
 import { deploy } from './deploy.js';
 import { CancelledError, isDeployError } from './errors.js';
+import { completeLocalEnv } from './local-inputs.js';
 import { createIo } from './setup/io.js';
 import { setup } from './setup/setup.js';
 
@@ -23,6 +24,8 @@ Options:
  * @property {NodeJS.ProcessEnv} env
  * @property {string} cwd Project root.
  * @property {typeof import('./clasp.js').createClasp} [createClasp] Clasp factory; tests inject a fake binary.
+ * @property {import('./local-inputs.js').Prompt | undefined} [prompt] `prompts`-compatible function, set only on an interactive terminal; enables local deploy prompts.
+ * @property {string} [home] Home directory holding `.clasprc.json`; tests inject a temporary one.
  */
 
 /**
@@ -31,7 +34,7 @@ Options:
  * @param {string[]} argv Command-line arguments, without the node and script paths.
  * @param {CliContext} context
  * @returns {Promise<number>} The exit code: 0 on success, 1 on a failed command, 2 on invalid usage,
- * 130 when the user cancels a setup prompt.
+ * 130 when the user cancels a prompt.
  */
 export async function main(argv, context) {
   const { stdout, stderr } = context;
@@ -83,9 +86,22 @@ export async function main(argv, context) {
   }
 
   try {
-    await deploy(context);
+    if (context.prompt && context.env.GITHUB_ACTIONS !== 'true') {
+      const env = await completeLocalEnv(context.env, {
+        prompt: context.prompt,
+        cwd: context.cwd,
+        home: context.home,
+      });
+      await deploy({ ...context, env });
+    } else {
+      await deploy(context);
+    }
     return 0;
   } catch (error) {
+    if (error instanceof CancelledError) {
+      stderr.write('Cancelled.\n');
+      return 130;
+    }
     if (isDeployError(error)) {
       stderr.write(`gasdev: ${error.message}\n`);
       return 1;

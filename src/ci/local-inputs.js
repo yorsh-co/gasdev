@@ -1,9 +1,9 @@
 // @ts-check
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { git } from '../release/git.js';
-import { CancelledError } from './errors.js';
+import { CancelledError, DeployError } from './errors.js';
 import { readEnv } from './setup/env.js';
 
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -11,7 +11,7 @@ const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 /**
  * Prompt function compatible with `prompts`.
  *
- * @typedef {(question: Record<string, unknown>) => Promise<Record<string, any>>} Prompt
+ * @typedef {(question: any) => Promise<Record<string, any>>} Prompt
  */
 
 /**
@@ -60,6 +60,7 @@ function defaultReadHead(cwd) {
  * @param {() => string | undefined} [options.readHead] Defaults to `git rev-parse HEAD`.
  * @returns {Promise<NodeJS.ProcessEnv>} A new object; `env` is not mutated.
  * @throws {CancelledError} If a prompt is cancelled.
+ * @throws {DeployError} If `~/.clasprc.json` exists but cannot be read.
  */
 export async function completeLocalEnv(
   env,
@@ -93,8 +94,15 @@ export async function completeLocalEnv(
 
   if (!completed.CLASPRC_JSON) {
     const file = join(home, '.clasprc.json');
-    if (existsSync(file)) {
+    try {
       completed.CLASPRC_JSON = readFileSync(file, 'utf8');
+    } catch (error) {
+      if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'ENOENT') {
+        throw new DeployError(
+          `Cannot read ${file} (${/** @type {NodeJS.ErrnoException} */ (error).code})`,
+          { cause: error },
+        );
+      }
     }
   }
 
