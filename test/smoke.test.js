@@ -31,7 +31,10 @@ describe('package', () => {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     });
-    const paths = JSON.parse(out)[0].files.map(
+    // npm <12 prints an array of manifests; npm 12 prints an object keyed by package name.
+    const parsed = JSON.parse(out);
+    const [manifest] = Array.isArray(parsed) ? parsed : Object.values(parsed);
+    const paths = manifest.files.map(
       (/** @type {{ path: string }} */ f) => f.path,
     );
     expect(paths).toContain('src/ci/index.js');
