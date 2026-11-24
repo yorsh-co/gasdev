@@ -67,6 +67,18 @@ describe('loadConfig', () => {
     expect(() => loadConfig(root)).toThrow(message);
   });
 
+  it.each(['github', 'gitea'])('accepts platform %s', (platform) => {
+    const root = createProject({ pkg: { gasdev: { ci: { platform } } } });
+    expect(() => loadConfig(root)).not.toThrow();
+  });
+
+  it.each(['gitlab', 1, '', null])('rejects platform %j', (platform) => {
+    const root = createProject({ pkg: { gasdev: { ci: { platform } } } });
+    expect(() => loadConfig(root)).toThrow(
+      'gasdev.ci.platform must be "github" or "gitea".',
+    );
+  });
+
   it('resolves the steps module to an absolute path', () => {
     const root = createProject({
       pkg: { gasdev: { ci: { steps: 'deploy/steps.mjs' } } },

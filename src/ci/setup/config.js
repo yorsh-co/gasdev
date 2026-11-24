@@ -4,7 +4,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { legacyKeyMessage } from '../../legacy-keys.js';
 import { DeployError } from '../errors.js';
 
-const KNOWN_KEYS = ['title', 'steps'];
+const KNOWN_KEYS = ['title', 'steps', 'platform'];
 
 /**
  * @typedef {object} DeployConfig
@@ -92,6 +92,10 @@ function validateOptions(options, cwd) {
     (typeof title !== 'string' || title.trim() === '')
   ) {
     throw new DeployError('gasdev.ci.title must be a non-empty string.');
+  }
+  const { platform } = options;
+  if (platform !== undefined && platform !== 'github' && platform !== 'gitea') {
+    throw new DeployError('gasdev.ci.platform must be "github" or "gitea".');
   }
   return { title, stepsPath: validateSteps(options.steps, cwd) };
 }
