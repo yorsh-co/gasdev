@@ -1583,6 +1583,124 @@ describe('gasdev.type', () => {
       initProject(dir, { init: true });
       expect(readFileSync(join(dir, FILE), 'utf8')).toBe('mine\n');
     });
+
+    describe('gitea platform', () => {
+      const GITEA = '.gitea/workflows/deploy.yml';
+      const template = readFileSync(
+        join(REPO_ROOT, 'templates/gas/files', GITEA),
+        'utf8',
+      );
+      const gitea = (type = 'app') => ({
+        gasdev: { type, ci: { platform: 'gitea' } },
+      });
+
+      it.each(['app', 'webapp'])('init creates it for %s', (type) => {
+        const dir = emptyProject(gitea(type));
+        const messages = initProject(dir, { init: true });
+        expect(messages).toContain(
+          `${GITEA}: created; add the dev and live secrets and variables (see "Deploy from Gitea" in the README)`,
+        );
+        expect(readFileSync(join(dir, GITEA), 'utf8')).toBe(template);
+        expect(existsSync(join(dir, FILE))).toBe(false);
+      });
+
+      it('platform github creates the GitHub file', () => {
+        const dir = emptyProject({
+          gasdev: { type: 'app', ci: { platform: 'github' } },
+        });
+        const messages = initProject(dir, { init: true });
+        const github = readFileSync(
+          join(REPO_ROOT, 'templates/gas/files', FILE),
+          'utf8',
+        ).replaceAll('{{GASDEV_VERSION}}', version);
+        expect(messages).toContain(
+          `${FILE}: created; add the dev and live environments (see "CI deployment" in the README)`,
+        );
+        expect(readFileSync(join(dir, FILE), 'utf8')).toBe(github);
+        expect(existsSync(join(dir, GITEA))).toBe(false);
+      });
+
+      it('does not create it for a library or without init', () => {
+        const lib = emptyProject(gitea('library'));
+        initProject(lib, { init: true });
+        expect(existsSync(join(lib, GITEA))).toBe(false);
+        const app = emptyProject(gitea());
+        initProject(app);
+        expect(existsSync(join(app, GITEA))).toBe(false);
+      });
+
+      it('leaves an existing file untouched', () => {
+        const dir = emptyProject(gitea());
+        mkdirSync(join(dir, '.gitea/workflows'), { recursive: true });
+        writeFileSync(join(dir, GITEA), 'mine\n');
+        initProject(dir, { init: true });
+        expect(readFileSync(join(dir, GITEA), 'utf8')).toBe('mine\n');
+      });
+
+      it('adds the gitea file next to an existing github one', () => {
+        const dir = emptyProject(gitea());
+        mkdirSync(join(dir, '.github/workflows'), { recursive: true });
+        writeFileSync(join(dir, FILE), 'mine\n');
+        initProject(dir, { init: true });
+        expect(readFileSync(join(dir, FILE), 'utf8')).toBe('mine\n');
+        expect(existsSync(join(dir, GITEA))).toBe(true);
+      });
+
+      it.each(['gitlab', 1, null])('rejects platform %j', (platform) => {
+        const dir = emptyProject({
+          gasdev: { type: 'app', ci: { platform } },
+        });
+        const message = `package.json: unknown ci platform ${JSON.stringify(platform)} (expected: github, gitea)`;
+        expect(() => initProject(dir, { init: true })).toThrow(message);
+        const result = run(dir, ['check']);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain(message);
+      });
+
+      it('template has per-target secrets, no fallthrough and explicit GITHUB_ACTIONS', () => {
+        expect(template).not.toContain('{{GASDEV_VERSION}}');
+        for (const name of [
+          'CLASPRC_JSON_DEV',
+          'CLASPRC_JSON_LIVE',
+          'GAS_SCRIPT_ID_DEV',
+          'GAS_SCRIPT_ID_LIVE',
+          'GAS_DEPLOYMENT_ID_DEV',
+          'GAS_DEPLOYMENT_ID_LIVE',
+        ]) {
+          expect(template).toContain(name);
+        }
+        expect(template).not.toContain(' || ');
+        expect(template.match(/GITHUB_ACTIONS: 'true'/g)).toHaveLength(2);
+      });
+
+      it('each deploy step uses only its own target names', () => {
+        const steps = template.split('\n      - ');
+        const stepFor = (branch) =>
+          steps.filter((step) =>
+            step.includes(`if: github.ref_name == '${branch}'`),
+          );
+        const dev = stepFor('develop');
+        const live = stepFor('main');
+        expect(dev).toHaveLength(1);
+        expect(live).toHaveLength(1);
+        for (const name of [
+          'CLASPRC_JSON_DEV',
+          'GAS_SCRIPT_ID_DEV',
+          'GAS_DEPLOYMENT_ID_DEV',
+        ]) {
+          expect(dev[0]).toContain(name);
+        }
+        expect(dev[0]).not.toContain('_LIVE');
+        for (const name of [
+          'CLASPRC_JSON_LIVE',
+          'GAS_SCRIPT_ID_LIVE',
+          'GAS_DEPLOYMENT_ID_LIVE',
+        ]) {
+          expect(live[0]).toContain(name);
+        }
+        expect(live[0]).not.toContain('_DEV');
+      });
+    });
   });
 
   it('init without a TTY prints the note and still runs the rest', () => {
