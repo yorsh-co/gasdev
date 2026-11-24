@@ -1641,9 +1641,12 @@ describe('gasdev.type', () => {
         const dir = emptyProject(gitea());
         mkdirSync(join(dir, '.github/workflows'), { recursive: true });
         writeFileSync(join(dir, FILE), 'mine\n');
-        initProject(dir, { init: true });
+        const messages = initProject(dir, { init: true });
         expect(readFileSync(join(dir, FILE), 'utf8')).toBe('mine\n');
-        expect(existsSync(join(dir, GITEA))).toBe(true);
+        expect(readFileSync(join(dir, GITEA), 'utf8')).toBe(template);
+        expect(messages).toContain(
+          `${GITEA}: created; add the dev and live secrets and variables (see "Deploy from Gitea" in the README)`,
+        );
       });
 
       it.each(['gitlab', 1, null])('rejects platform %j', (platform) => {
@@ -1675,7 +1678,7 @@ describe('gasdev.type', () => {
 
       it('each deploy step uses only its own target names', () => {
         const steps = template.split('\n      - ');
-        const stepFor = (branch) =>
+        const stepFor = (/** @type {string} */ branch) =>
           steps.filter((step) =>
             step.includes(`if: github.ref_name == '${branch}'`),
           );

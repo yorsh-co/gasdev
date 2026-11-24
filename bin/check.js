@@ -123,7 +123,7 @@ const LEGACY_CLEAN = 'rimraf dist';
  * @typedef {object} ResolvedConfig
  * @property {string} preset Preset name; `gas` when unset.
  * @property {string | undefined} [type] Project type (`library`, `app` or `webapp`); undefined when unset.
- * @property {string} [platform] CI platform (`github` or `gitea`); `github` when unset.
+ * @property {'github' | 'gitea'} [platform] CI platform (`github` or `gitea`); `github` when unset.
  * @property {string[] | undefined} loadOrder Source files under `src/` in load order.
  * @property {Record<string, string> | undefined} peers Optional sibling libraries and their version ranges.
  * @property {GasTestConfig | undefined} gasTest Settings for tests that run in Apps Script.
@@ -471,7 +471,7 @@ function resolveConfig(pkg) {
   return {
     preset,
     type,
-    platform,
+    platform: /** @type {'github' | 'gitea'} */ (platform),
     loadOrder:
       config['loadOrder'] === undefined
         ? undefined
@@ -1121,7 +1121,7 @@ function createDeployTemplates(cwd, type) {
  *
  * @param {string} cwd
  * @param {string} type One of `library`, `app` or `webapp`.
- * @param {string | undefined} platform `github` or `gitea`; `github` when unset.
+ * @param {'github' | 'gitea' | undefined} platform `github` or `gitea`; `github` when unset.
  * @returns {string[]} One message per file created.
  */
 function createDeployWorkflow(cwd, type, platform) {

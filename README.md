@@ -1327,7 +1327,7 @@ Gitea has no branch-restricted environments, so the targets are told apart by a 
 
 Set them under the repository's Settings > Actions > Secrets and Settings > Actions > Variables.
 
-Follow the [setup](#setup) steps 1-4 and 7 (store the credentials in `CLASPRC_JSON_DEV` and `CLASPRC_JSON_LIVE`). Steps 5, 6 and 8 are replaced by the table above and the scaffolded workflow. Then verify as in step 9; the web app URL appears in the job log, not in a summary.
+Follow the [setup](#setup) steps 1-4 and 7 (store the credentials in `CLASPRC_JSON_DEV` and `CLASPRC_JSON_LIVE`). Steps 5, 6 and 8 are replaced by the table above and the scaffolded workflow. Paste each account's `~/.clasprc.json` into `CLASPRC_JSON_DEV` and `CLASPRC_JSON_LIVE` under the repository's Settings > Actions > Secrets, logging in separately per account; `gh secret set --env` does not apply on Gitea. Then verify as in step 9; the web app URL appears in the job log, not in a summary.
 
 #### Security
 
