@@ -2,6 +2,14 @@
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- Opt-in `gasdev.ci.platform` (`"github"` by default, or `"gitea"`), validated by `check` and `setup`. With `"gitea"`, `init` scaffolds `.gitea/workflows/deploy.yml` for app and webapp projects: a push to `develop` deploys dev and a push to `main` deploys live, using `_DEV`/`_LIVE` suffixed secrets and variables. See the README "Deploy from Gitea" section and ADR 0035
+
+---
+
 ## [3.2.1] - 2026-11-14
 
 ### Fixed
