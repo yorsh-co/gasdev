@@ -2,6 +2,24 @@
 
 ---
 
+## [Unreleased]
+
+---
+
+## [3.3.0] - 2026-11-26
+
+### Added
+
+- Opt-in `gasdev.ci.platform` (`"github"` by default, or `"gitea"`), validated by `check` and `setup`. With `"gitea"`, `init` scaffolds `.gitea/workflows/deploy.yml` for app and webapp projects: a push to `develop` deploys dev and a push to `main` deploys prod, using `_DEV`/`_PROD` suffixed secrets and variables. See the README "Deploy from Gitea" section and ADR 0035
+- `gasdev manifest` writes `<rootDir>/appsscript.json` from `appsscript.example.json`, with `rootDir` read from `.clasp.example.json`, and warns when the template has no `timeZone`. See ADR [0036](docs/adr/0036-manifest-command.md)
+
+### Changed
+
+- `gasdev check` now requires `.clasp.json` in the `gas` `.gitignore`. Existing gas projects should run `gasdev check --fix`, and `git rm --cached .clasp.json` if the file is already committed; see [ADR 0037](docs/adr/0037-gitignore-clasp-json.md)
+- The scaffolded GitHub deploy target is now the `prod` environment instead of `live`. Existing projects keep `live` until they rename the GitHub environment (or create `prod` with the same branch policy, secret and variables) and change `deploy.yml` to `'prod'`; see [ADR 0038](docs/adr/0038-prod-environment-name.md)
+
+---
+
 ## [3.2.1] - 2026-11-14
 
 ### Fixed

@@ -15,6 +15,7 @@ import { HtmlError, compareModule } from './html.js';
 
 const PRESETS = ['gas', 'node'];
 const PROJECT_TYPES = ['library', 'app', 'webapp'];
+const CI_PLATFORMS = ['github', 'gitea'];
 const KNOWN_KEYS = [
   'preset',
   'type',
@@ -122,6 +123,7 @@ const LEGACY_CLEAN = 'rimraf dist';
  * @typedef {object} ResolvedConfig
  * @property {string} preset Preset name; `gas` when unset.
  * @property {string | undefined} [type] Project type (`library`, `app` or `webapp`); undefined when unset.
+ * @property {'github' | 'gitea'} [platform] CI platform (`github` or `gitea`); `github` when unset.
  * @property {string[] | undefined} loadOrder Source files under `src/` in load order.
  * @property {Record<string, string> | undefined} peers Optional sibling libraries and their version ranges.
  * @property {GasTestConfig | undefined} gasTest Settings for tests that run in Apps Script.
@@ -425,6 +427,15 @@ function resolveConfig(pkg) {
       throw new CheckError(`package.json: "gasdev.${key}" must be an object`);
     }
   }
+  const platform =
+    isRecord(config['ci']) && config['ci']['platform'] !== undefined
+      ? config['ci']['platform']
+      : 'github';
+  if (typeof platform !== 'string' || !CI_PLATFORMS.includes(platform)) {
+    throw new CheckError(
+      `package.json: unknown ci platform ${JSON.stringify(platform)} (expected: ${CI_PLATFORMS.join(', ')})`,
+    );
+  }
   const preset = config['preset'] ?? 'gas';
   if (typeof preset !== 'string' || !PRESETS.includes(preset)) {
     throw new CheckError(
@@ -460,6 +471,7 @@ function resolveConfig(pkg) {
   return {
     preset,
     type,
+    platform: /** @type {'github' | 'gitea'} */ (platform),
     loadOrder:
       config['loadOrder'] === undefined
         ? undefined
@@ -1104,25 +1116,36 @@ function createDeployTemplates(cwd, type) {
 
 /**
  * Creates the CI deploy workflow of a deployed project (`app` or `webapp`)
- * when absent, pinned to gasdev's own version.
+ * when absent. The GitHub one is pinned to gasdev's own version; the Gitea one
+ * inlines its steps and needs no substitution.
  *
  * @param {string} cwd
  * @param {string} type One of `library`, `app` or `webapp`.
+ * @param {'github' | 'gitea' | undefined} platform `github` or `gitea`; `github` when unset.
  * @returns {string[]} One message per file created.
  */
-function createDeployWorkflow(cwd, type) {
-  const file = '.github/workflows/deploy.yml';
+function createDeployWorkflow(cwd, type, platform) {
+  const gitea = platform === 'gitea';
+  const file = gitea
+    ? '.gitea/workflows/deploy.yml'
+    : '.github/workflows/deploy.yml';
   const path = join(cwd, file);
   if (type === 'library' || existsSync(path)) return [];
-  const version = gasdevVersion();
   const template = readFileSync(
-    new URL('gas/files/.github/workflows/deploy.yml', TEMPLATES),
+    new URL(`gas/files/${file}`, TEMPLATES),
     'utf8',
   );
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, template.replaceAll('{{GASDEV_VERSION}}', version));
+  writeFileSync(
+    path,
+    gitea
+      ? template
+      : template.replaceAll('{{GASDEV_VERSION}}', gasdevVersion()),
+  );
   return [
-    `${file}: created; add the dev and live environments (see "CI deployment" in the README)`,
+    gitea
+      ? `${file}: created; add the dev and prod secrets and variables (see "Deploy from Gitea" in the README)`
+      : `${file}: created; add the dev and prod environments (see "CI deployment" in the README)`,
   ];
 }
 
@@ -1263,7 +1286,12 @@ export async function chooseProjectType(prompt) {
  */
 export function initProject(cwd, { type, init = false } = {}) {
   const pkg = readPackage(cwd);
-  const { preset, gasTest, type: configuredType } = resolveConfig(pkg);
+  const {
+    preset,
+    gasTest,
+    platform,
+    type: configuredType,
+  } = resolveConfig(pkg);
   if (pkg['scripts'] !== undefined && !isRecord(pkg['scripts'])) {
     throw new CheckError('package.json: scripts must be an object');
   }
@@ -1306,7 +1334,7 @@ export function initProject(cwd, { type, init = false } = {}) {
   if (init && preset === 'gas' && projectType !== undefined) {
     files.push(...createTypeFiles(cwd, projectType, gasTest !== undefined));
     files.push(...createDeployTemplates(cwd, projectType));
-    files.push(...createDeployWorkflow(cwd, projectType));
+    files.push(...createDeployWorkflow(cwd, projectType, platform));
   }
   return [...files, ...pkgMessages];
 }

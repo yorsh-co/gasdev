@@ -1,0 +1,49 @@
+# Deploys to Apps Script: develop -> dev project, main -> prod project.
+# Secrets: CLASPRC_JSON_DEV, CLASPRC_JSON_PROD.
+# Variables: GAS_SCRIPT_ID_DEV, GAS_SCRIPT_ID_PROD, GAS_DEPLOYMENT_ID_DEV,
+# GAS_DEPLOYMENT_ID_PROD (the deployment IDs may stay empty for push-only projects).
+# See "Deploy from Gitea" in the gasdev README.
+name: Deploy
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - name: Deploy to dev
+        id: deploy-dev
+        if: github.ref_name == 'develop'
+        run: npx --no-install gasdev deploy
+        env:
+          GITHUB_ACTIONS: 'true'
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON_DEV }}
+          GAS_SCRIPT_ID: ${{ vars.GAS_SCRIPT_ID_DEV }}
+          GAS_DEPLOYMENT_ID: ${{ vars.GAS_DEPLOYMENT_ID_DEV }}
+      - name: Deploy to prod
+        id: deploy-prod
+        if: github.ref_name == 'main'
+        run: npx --no-install gasdev deploy
+        env:
+          GITHUB_ACTIONS: 'true'
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON_PROD }}
+          GAS_SCRIPT_ID: ${{ vars.GAS_SCRIPT_ID_PROD }}
+          GAS_DEPLOYMENT_ID: ${{ vars.GAS_DEPLOYMENT_ID_PROD }}

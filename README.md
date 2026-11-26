@@ -405,7 +405,7 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
   - Validated by `gasdev release`, not by `check`: an object with the keys `remote`, `targets` and `githubRelease`; `targets` is optional (default: one `dist` target); when given, a non-empty list with unique branches.
   - Unknown keys in `gasdev.release`, in a target or in an `include` entry are rejected, naming the key path (for example `gasdev.release.targets[1].pakageJson is not a known option`).
 - `ci` configures the [setup wizard](#wizard-configuration).
-  - Validated by `gasdev setup`, not by `check`: an object with the keys `title` and `steps`; any other key is rejected.
+  - An object with the keys `title`, `steps` and `platform`; any other key is rejected by `gasdev setup`. `title` and `steps` are validated by `setup`, not by `check`. `platform` is `"github"` (default) or `"gitea"`, validated by both `check` and `setup`; `init` reads it to choose the deploy workflow (see [Deploy from Gitea](#deploy-from-gitea)).
 - `loadOrder`, `peers`, `gasTest` and `html` with the `node` preset are an error.
 
 ### What is checked
@@ -421,10 +421,10 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
 
 Required lines per preset:
 
-| File              | `gas`                                                                                                       | `node`                                                                                             |
-| ----------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `.gitignore`      | `node_modules/`, `dist/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` | `node_modules/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` |
-| `.prettierignore` | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`                       | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`              |
+| File              | `gas`                                                                                                                      | `node`                                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `.gitignore`      | `node_modules/`, `dist/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env`, `.clasp.json` | `node_modules/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` |
+| `.prettierignore` | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`                                      | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`              |
 
 Required scripts, exact values, for the `gas` preset. `release` and `build:release` are required for `library` projects (or when `gasdev.type` is unset) only:
 
@@ -931,6 +931,24 @@ Use `gasdev clean [<dir>]` to remove a build directory. It is the `clean` script
 - It works the same on every platform and needs no other dependency.
 - It refuses the project root and any path outside it, including a path that leaves the project through a symlink (exit 1).
 
+### Manifest
+
+Use `gasdev manifest` to write `<rootDir>/appsscript.json` from `appsscript.example.json`. Deploy requires that file, and no other gasdev command writes it during a build.
+
+- `rootDir` comes from `.clasp.example.json` and is validated as for `gasdev deploy`: absent means `.`, and the path must be relative with no `..`. `.clasp.example.json` is required.
+- The template is written verbatim as 2-space JSON with a trailing newline. The command creates `rootDir` if needed and overwrites any existing manifest, so CI and local builds produce the same output.
+- It does not merge with an existing built manifest. The time zone that `gasdev setup` chooses lives only in the built manifest, so set `timeZone` in `appsscript.example.json`. Without it the command still succeeds and warns on stderr.
+
+Append it to `build`. The rest of the build is project-defined; this is an example:
+
+```json
+{
+  "scripts": {
+    "build": "gasdev clean && tsc -p tsconfig.json && gasdev manifest"
+  }
+}
+```
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Releasing
@@ -1213,6 +1231,8 @@ The release requirement for these rulesets is stated under [GitHub Release](#git
 - The Apps Script API enabled at https://script.google.com/home/usersettings
 - `@google/clasp` as a dev dependency (see [Requirements](#requirements))
 
+Projects hosted on Gitea can use an inline workflow instead; see [Deploy from Gitea](#deploy-from-gitea).
+
 The workflow runs `gasdev` with `npx --no-install`, so a missing dependency fails instead of fetching an unrelated package. Add a script for the wizard:
 
 ```json
@@ -1223,7 +1243,7 @@ The workflow is referenced by an exact tag (`@v3.0.0`) and `gasdev` by a semver 
 
 ### Setup
 
-Step 1 is done once per Google account, steps 2-3 once per repository, steps 4-7 once per environment (`dev`, `live`), and steps 8-9 once.
+Step 1 is done once per Google account, steps 2-3 once per repository, steps 4-7 once per environment (`dev`, `prod`), and steps 8-9 once.
 
 #### 1. Enable the Apps Script API
 
@@ -1237,11 +1257,13 @@ Commit `.clasp.example.json` and `appsscript.example.json` at the project root. 
 { "rootDir": "dist" }
 ```
 
-Add `.clasp.json` to `.gitignore`: `gasdev` overwrites it from the template plus `GAS_SCRIPT_ID`.
+`gasdev init` and `check --fix` add `.clasp.json` to `.gitignore`; `gasdev` overwrites it from the template plus `GAS_SCRIPT_ID`. If it is already committed, run `git rm --cached .clasp.json`.
+
+Set `timeZone` in `appsscript.example.json`, because `gasdev manifest` does not keep the zone that `setup` writes.
 
 #### 3. Provide `check` and `build`
 
-Define `npm run check` and `npm run build` scripts, or override them with the [workflow inputs](#workflow-inputs-and-outputs). The build must produce `<rootDir>/appsscript.json`. Web apps declare `oauthScopes` explicitly; see [Scope changes](#scope-changes).
+Define `npm run check` and `npm run build` scripts, or override them with the [workflow inputs](#workflow-inputs-and-outputs). The build must produce `<rootDir>/appsscript.json`. Append `gasdev manifest` to `build` to write it from `appsscript.example.json`; see [Manifest](#manifest). Web apps declare `oauthScopes` explicitly; see [Scope changes](#scope-changes).
 
 #### 4. Create the Apps Script project and web app deployment
 
@@ -1263,7 +1285,7 @@ Manually in the editor:
 
 #### 5. Create the GitHub environment restricted to its branch
 
-Example for `dev` and `develop`; repeat for `live` and `main`. The deployment branch policy releases `CLASPRC_JSON` only to runs on that branch:
+Example for `dev` and `develop`; repeat for `prod` and `main`. The deployment branch policy releases `CLASPRC_JSON` only to runs on that branch:
 
 ```sh
 gh api -X PUT repos/{owner}/{repo}/environments/dev \
@@ -1300,7 +1322,53 @@ Add the workflow from [Usage](#usage) at `.github/workflows/deploy.yml`.
 
 #### 9. Verify the first run
 
-Push to `develop`, then merge to `main` and confirm the `live` run. The job summary and the `url` output show the web app URL; a push-only project shows no URL. On a scope-change failure, follow [Scope changes](#scope-changes). On `invalid_grant`, follow [token rotation](#token-expiry-revocation-and-rotation).
+Push to `develop`, then merge to `main` and confirm the `prod` run. The job summary and the `url` output show the web app URL; a push-only project shows no URL. On a scope-change failure, follow [Scope changes](#scope-changes). On `invalid_grant`, follow [token rotation](#token-expiry-revocation-and-rotation).
+
+### Deploy from Gitea
+
+Projects hosted on Gitea opt in with `gasdev.ci.platform` in `package.json`, then run `npx gasdev init`:
+
+```json
+{ "gasdev": { "type": "webapp", "ci": { "platform": "gitea" } } }
+```
+
+`init` creates `.gitea/workflows/deploy.yml` for `app` and `webapp` projects (not `library`). A push to `develop` deploys to the dev script and a push to `main` to the prod one. The workflow inlines the steps of `gas-deploy.yml` and runs the `gasdev` from your lockfile, so there is no workflow ref to keep in sync.
+
+Gitea has no branch-restricted environments, so the targets are told apart by a name suffix:
+
+| Name                     | Kind     | Purpose                                   |
+| ------------------------ | -------- | ----------------------------------------- |
+| `CLASPRC_JSON_DEV`       | Secret   | clasp credentials for dev                 |
+| `CLASPRC_JSON_PROD`      | Secret   | clasp credentials for prod                |
+| `GAS_SCRIPT_ID_DEV`      | Variable | Script ID for dev                         |
+| `GAS_SCRIPT_ID_PROD`     | Variable | Script ID for prod                        |
+| `GAS_DEPLOYMENT_ID_DEV`  | Variable | Web app deployment ID for dev (web apps)  |
+| `GAS_DEPLOYMENT_ID_PROD` | Variable | Web app deployment ID for prod (web apps) |
+
+Set them under the repository's Settings > Actions > Secrets and Settings > Actions > Variables.
+
+Follow the [setup](#setup) steps 1-4 and 7 (store the credentials in `CLASPRC_JSON_DEV` and `CLASPRC_JSON_PROD`). Steps 5, 6 and 8 are replaced by the table above and the scaffolded workflow. Paste each account's `~/.clasprc.json` into `CLASPRC_JSON_DEV` and `CLASPRC_JSON_PROD` under the repository's Settings > Actions > Secrets, logging in separately per account; `gh secret set --env` does not apply on Gitea. Then verify as in step 9; the web app URL appears in the job log, not in a summary.
+
+#### Security
+
+Every workflow run with access to the repository secrets can read `CLASPRC_JSON_PROD`, not only runs on `main`. Reduce the exposure:
+
+- Protect `develop` and `main`, and require review before merging.
+- Restrict who can push or open workflows in the repository.
+- Use a separate Google account for prod, owning only the prod scripts.
+
+See [ADR 0035](docs/adr/0035-gitea-deploy-workflow.md).
+
+#### Requirements and limits
+
+- Gitea 1.20 or later, for the `vars` context.
+- A runner with the `ubuntu-latest` label.
+- The workflow uses `actions/checkout` and `actions/setup-node`. On instances with `DEFAULT_ACTIONS_URL=self`, change them to full `https://github.com/...` URLs.
+- There is no `concurrency` guard, because not every Gitea version supports it. Pushes in quick succession can deploy concurrently.
+- Gitea does not render the job summary.
+- `init` never overwrites the file and `check` never inspects it, so the project keeps the steps it was scaffolded with. To re-scaffold, delete the file and rerun `init`.
+- GitHub ignores `.gitea/`, and Gitea prefers `.gitea/workflows` over `.github/workflows` when both exist. A repository mirrored to both hosts can keep both files.
+- `.github/dependabot.yml` is still created and checked, though Gitea ignores it.
 
 ### Setup wizard
 
@@ -1441,7 +1509,7 @@ export default [
 
 #### Files written
 
-- `.clasp.json`: the template plus `scriptId`. It is always regenerated, never merged with an older file.
+- `.clasp.json`: the template plus `scriptId`. Setup rewrites it in the configuration step, also when reusing a project, and never merges it with an older file.
 - `<rootDir>/appsscript.json`: the existing manifest, then the template, with the chosen `timeZone`. The default time zone is the template's, then the existing manifest's, then the system's, then `Etc/UTC`.
 - `.env`: updated in place with the variables below, and created with mode `0600`.
 
@@ -1468,24 +1536,26 @@ jobs:
   deploy:
     uses: yorsh-co/gasdev/.github/workflows/gas-deploy.yml@v3.0.0
     with:
-      environment: ${{ github.ref_name == 'main' && 'live' || 'dev' }}
+      environment: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
     secrets: inherit
 ```
 
-`develop` deploys to the `dev` environment and `main` to `live`. `secrets: inherit` is enough: the secret is resolved from the environment the job runs in.
+`develop` deploys to the `dev` environment and `main` to `prod`. `secrets: inherit` is enough: the secret is resolved from the environment the job runs in.
 
 #### CI deployment
 
-For `app` and `webapp` projects, `gasdev init` creates `.github/workflows/deploy.yml` (only when absent) pinned to the installed gasdev version. Pushing `develop` deploys `dev` and pushing `main` deploys `live`, so create both [environments](#environments) before the first push. Personal dev copies of the script keep using the local `.clasp.json` written by `gasdev setup`.
+For `app` and `webapp` projects, `gasdev init` creates `.github/workflows/deploy.yml` (only when absent) pinned to the installed gasdev version. Pushing `develop` deploys `dev` and pushing `main` deploys `prod`, so create both [environments](#environments) before the first push. Personal dev copies of the script keep using the local `.clasp.json` written by `gasdev setup`.
 
 #### Environments
 
 | Environment | Branch    | Secret         | Variables                            |
 | ----------- | --------- | -------------- | ------------------------------------ |
 | `dev`       | `develop` | `CLASPRC_JSON` | `GAS_SCRIPT_ID`, `GAS_DEPLOYMENT_ID` |
-| `live`      | `main`    | `CLASPRC_JSON` | `GAS_SCRIPT_ID`, `GAS_DEPLOYMENT_ID` |
+| `prod`      | `main`    | `CLASPRC_JSON` | `GAS_SCRIPT_ID`, `GAS_DEPLOYMENT_ID` |
 
 The IDs are variables, not secrets, on purpose: GitHub drops job outputs that contain a secret value, and the web app URL contains the deployment ID. They identify the project but grant no access. Both may contain only letters, digits, `_` and `-`.
+
+A `deploy.yml` that still passes `'live'` keeps working with a `live` environment; see [ADR 0038](docs/adr/0038-prod-environment-name.md) to migrate.
 
 #### Project types
 
