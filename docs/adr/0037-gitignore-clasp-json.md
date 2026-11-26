@@ -5,7 +5,7 @@
 
 ## Context
 
-`.clasp.json` holds a per-developer `scriptId`. `gasdev` regenerates it from `.clasp.example.json` plus `GAS_SCRIPT_ID` on every `setup` and `deploy`, so committing it only produces noise and conflicts. The README told users to ignore it by hand, and `check` did not enforce it.
+`.clasp.json` holds a per-developer `scriptId`. `gasdev` regenerates it from `.clasp.example.json` plus `GAS_SCRIPT_ID` in the `setup` configuration step (also when it reuses an existing project) and on every `deploy`, so committing it only produces noise and conflicts. The README told users to ignore it by hand, and `check` did not enforce it.
 
 ## Decision
 

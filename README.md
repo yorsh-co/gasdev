@@ -1489,7 +1489,7 @@ export default [
 
 #### Files written
 
-- `.clasp.json`: the template plus `scriptId`. It is always regenerated, never merged with an older file.
+- `.clasp.json`: the template plus `scriptId`. Setup rewrites it in the configuration step, also when reusing a project, and never merges it with an older file.
 - `<rootDir>/appsscript.json`: the existing manifest, then the template, with the chosen `timeZone`. The default time zone is the template's, then the existing manifest's, then the system's, then `Etc/UTC`.
 - `.env`: updated in place with the variables below, and created with mode `0600`.
 
