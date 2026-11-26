@@ -21,6 +21,7 @@ import { DevError, runDev } from './dev.js';
 import { GasTestError, runBuild, runRun } from './gas-test.js';
 import { GithubError, runGithub } from './github.js';
 import { HtmlError, runHtml } from './html.js';
+import { ManifestError, runManifest } from './manifest.js';
 import { PeersError, runPeers } from './peers.js';
 
 const OPTIONS = /** @type {const} */ ({
@@ -46,6 +47,7 @@ const USAGE = `Usage: gasdev check [--fix]
        gasdev deploy
        gasdev peers sync [--check]
        gasdev clean [<dir>]
+       gasdev manifest
 
 Reports drift of .gitignore, .prettierignore, .github/dependabot.yml and the
 standard package.json scripts from the preset templates. Writes only with --fix
@@ -89,6 +91,7 @@ Commands:
                    network access
   clean [<dir>]    Remove <dir> (default: dist) inside the project; succeeds when
                    absent
+  manifest         Write <rootDir>/appsscript.json from appsscript.example.json (rootDir from .clasp.example.json)
 
 Options:
   -h, --help       Show this help
@@ -163,6 +166,7 @@ export async function main(argv) {
   const isDev = command === 'dev' && rest.length === 0;
   const isPeers = command === 'peers' && rest.join(' ') === 'sync';
   const isClean = command === 'clean' && rest.length <= 1;
+  const isManifest = command === 'manifest' && rest.length === 0;
   if (
     !isCheck &&
     !isInit &&
@@ -172,7 +176,8 @@ export async function main(argv) {
     !isHtml &&
     !isDev &&
     !isPeers &&
-    !isClean
+    !isClean &&
+    !isManifest
   ) {
     return usageError(`unknown command: ${positionals.join(' ')}.`);
   }
@@ -198,6 +203,7 @@ export async function main(argv) {
   }
   try {
     if (isClean) return runClean(process.cwd(), rest[0]);
+    if (isManifest) return runManifest(process.cwd());
     if (isGithub) return runGithub({ fix: values.fix === true });
     if (isHtml) {
       const { html } = loadConfig(process.cwd());
@@ -255,6 +261,7 @@ export async function main(argv) {
       error instanceof GasTestError ||
       error instanceof GithubError ||
       error instanceof HtmlError ||
+      error instanceof ManifestError ||
       error instanceof PeersError
     ) {
       process.stderr.write(`gasdev: ${error.message}\n`);
