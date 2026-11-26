@@ -12,6 +12,7 @@
 ### Changed
 
 - `gasdev check` now requires `.clasp.json` in the `gas` `.gitignore`. Existing gas projects should run `gasdev check --fix`, and `git rm --cached .clasp.json` if the file is already committed; see [ADR 0037](docs/adr/0037-gitignore-clasp-json.md)
+- The scaffolded GitHub deploy target is now the `prod` environment instead of `live`. Existing projects keep `live` until they rename the GitHub environment (or create `prod` with the same branch policy, secret and variables) and change `deploy.yml` to `'prod'`; see [ADR 0038](docs/adr/0038-prod-environment-name.md)
 
 ---
 
