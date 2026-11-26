@@ -7,6 +7,7 @@
 ### Added
 
 - Opt-in `gasdev.ci.platform` (`"github"` by default, or `"gitea"`), validated by `check` and `setup`. With `"gitea"`, `init` scaffolds `.gitea/workflows/deploy.yml` for app and webapp projects: a push to `develop` deploys dev and a push to `main` deploys live, using `_DEV`/`_LIVE` suffixed secrets and variables. See the README "Deploy from Gitea" section and ADR 0035
+- `gasdev manifest` writes `<rootDir>/appsscript.json` from `appsscript.example.json`, with `rootDir` read from `.clasp.example.json`, and warns when the template has no `timeZone`. See ADR [0036](docs/adr/0036-manifest-command.md)
 
 ---
 

@@ -63,6 +63,17 @@ function validateRootDir(value) {
 }
 
 /**
+ * Reads and validates `rootDir` from `.clasp.example.json`.
+ *
+ * @param {string} cwd Project root.
+ * @returns {string} The relative `rootDir`, `.` when the template omits it.
+ * @throws {DeployError} If the template is missing or invalid.
+ */
+export function resolveRootDir(cwd) {
+  return validateRootDir(readTemplate(cwd).rootDir);
+}
+
+/**
  * Renders `.clasp.json` from `.clasp.example.json` plus the script ID,
  * overwriting any existing file.
  *

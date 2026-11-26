@@ -3,7 +3,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { renderClaspConfig } from '../../src/ci/clasp-config.js';
+import {
+  renderClaspConfig,
+  resolveRootDir,
+} from '../../src/ci/clasp-config.js';
 import { DeployError } from '../../src/ci/errors.js';
 
 /** @type {string} */
@@ -56,5 +59,17 @@ describe('renderClaspConfig', () => {
     }
     expect(() => renderClaspConfig(cwd, 's')).toThrow(DeployError);
     expect(() => renderClaspConfig(cwd, 's')).toThrow(expected);
+  });
+});
+
+describe('resolveRootDir', () => {
+  it('defaults to . when rootDir is absent', () => {
+    writeTemplate('{}');
+    expect(resolveRootDir(cwd)).toBe('.');
+  });
+
+  it('returns a custom rootDir', () => {
+    writeTemplate('{"rootDir":"dist"}');
+    expect(resolveRootDir(cwd)).toBe('dist');
   });
 });
