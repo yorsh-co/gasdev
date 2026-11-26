@@ -1144,8 +1144,8 @@ function createDeployWorkflow(cwd, type, platform) {
   );
   return [
     gitea
-      ? `${file}: created; add the dev and live secrets and variables (see "Deploy from Gitea" in the README)`
-      : `${file}: created; add the dev and live environments (see "CI deployment" in the README)`,
+      ? `${file}: created; add the dev and prod secrets and variables (see "Deploy from Gitea" in the README)`
+      : `${file}: created; add the dev and prod environments (see "CI deployment" in the README)`,
   ];
 }
 
