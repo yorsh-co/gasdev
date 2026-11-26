@@ -21,5 +21,5 @@ The production target is named `prod` in both flows:
 
 - `init` writes `.github/workflows/deploy.yml` only when it is absent, so existing projects are not rewritten and keep working with `live` until they migrate.
 - GitHub migration: rename the `live` environment to `prod`, or create `prod` with the same branch policy, secret and variables, then edit `deploy.yml` to use `'prod'`.
-- Gitea migration: recreate the secrets and variables with the `_PROD` suffix and update the workflow.
+- Gitea migration, only for projects scaffolded with 3.3.0-beta.0: recreate the secrets and variables with the `_PROD` suffix and update the workflow.
 - This is not a breaking change to gasdev itself.

@@ -1555,6 +1555,8 @@ For `app` and `webapp` projects, `gasdev init` creates `.github/workflows/deploy
 
 The IDs are variables, not secrets, on purpose: GitHub drops job outputs that contain a secret value, and the web app URL contains the deployment ID. They identify the project but grant no access. Both may contain only letters, digits, `_` and `-`.
 
+A `deploy.yml` that still passes `'live'` keeps working with a `live` environment; see [ADR 0038](docs/adr/0038-prod-environment-name.md) to migrate.
+
 #### Project types
 
 | `gasdev.type`       | `GAS_DEPLOYMENT_ID` | Result                                       |
