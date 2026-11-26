@@ -1,6 +1,7 @@
 # 35. Gitea deploy workflow
 
 - Status: Accepted
+- Amended by [ADR 0038](0038-prod-environment-name.md) (`_LIVE` renamed to `_PROD`).
 - Date: 2026-11-24
 
 ## Context

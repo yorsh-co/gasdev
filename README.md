@@ -1243,7 +1243,7 @@ The workflow is referenced by an exact tag (`@v3.0.0`) and `gasdev` by a semver 
 
 ### Setup
 
-Step 1 is done once per Google account, steps 2-3 once per repository, steps 4-7 once per environment (`dev`, `live`), and steps 8-9 once.
+Step 1 is done once per Google account, steps 2-3 once per repository, steps 4-7 once per environment (`dev`, `prod`), and steps 8-9 once.
 
 #### 1. Enable the Apps Script API
 
@@ -1285,7 +1285,7 @@ Manually in the editor:
 
 #### 5. Create the GitHub environment restricted to its branch
 
-Example for `dev` and `develop`; repeat for `live` and `main`. The deployment branch policy releases `CLASPRC_JSON` only to runs on that branch:
+Example for `dev` and `develop`; repeat for `prod` and `main`. The deployment branch policy releases `CLASPRC_JSON` only to runs on that branch:
 
 ```sh
 gh api -X PUT repos/{owner}/{repo}/environments/dev \
@@ -1322,7 +1322,7 @@ Add the workflow from [Usage](#usage) at `.github/workflows/deploy.yml`.
 
 #### 9. Verify the first run
 
-Push to `develop`, then merge to `main` and confirm the `live` run. The job summary and the `url` output show the web app URL; a push-only project shows no URL. On a scope-change failure, follow [Scope changes](#scope-changes). On `invalid_grant`, follow [token rotation](#token-expiry-revocation-and-rotation).
+Push to `develop`, then merge to `main` and confirm the `prod` run. The job summary and the `url` output show the web app URL; a push-only project shows no URL. On a scope-change failure, follow [Scope changes](#scope-changes). On `invalid_grant`, follow [token rotation](#token-expiry-revocation-and-rotation).
 
 ### Deploy from Gitea
 
@@ -1332,30 +1332,30 @@ Projects hosted on Gitea opt in with `gasdev.ci.platform` in `package.json`, the
 { "gasdev": { "type": "webapp", "ci": { "platform": "gitea" } } }
 ```
 
-`init` creates `.gitea/workflows/deploy.yml` for `app` and `webapp` projects (not `library`). A push to `develop` deploys to the dev script and a push to `main` to the live one. The workflow inlines the steps of `gas-deploy.yml` and runs the `gasdev` from your lockfile, so there is no workflow ref to keep in sync.
+`init` creates `.gitea/workflows/deploy.yml` for `app` and `webapp` projects (not `library`). A push to `develop` deploys to the dev script and a push to `main` to the prod one. The workflow inlines the steps of `gas-deploy.yml` and runs the `gasdev` from your lockfile, so there is no workflow ref to keep in sync.
 
 Gitea has no branch-restricted environments, so the targets are told apart by a name suffix:
 
 | Name                     | Kind     | Purpose                                   |
 | ------------------------ | -------- | ----------------------------------------- |
 | `CLASPRC_JSON_DEV`       | Secret   | clasp credentials for dev                 |
-| `CLASPRC_JSON_LIVE`      | Secret   | clasp credentials for live                |
+| `CLASPRC_JSON_PROD`      | Secret   | clasp credentials for prod                |
 | `GAS_SCRIPT_ID_DEV`      | Variable | Script ID for dev                         |
-| `GAS_SCRIPT_ID_LIVE`     | Variable | Script ID for live                        |
+| `GAS_SCRIPT_ID_PROD`     | Variable | Script ID for prod                        |
 | `GAS_DEPLOYMENT_ID_DEV`  | Variable | Web app deployment ID for dev (web apps)  |
-| `GAS_DEPLOYMENT_ID_LIVE` | Variable | Web app deployment ID for live (web apps) |
+| `GAS_DEPLOYMENT_ID_PROD` | Variable | Web app deployment ID for prod (web apps) |
 
 Set them under the repository's Settings > Actions > Secrets and Settings > Actions > Variables.
 
-Follow the [setup](#setup) steps 1-4 and 7 (store the credentials in `CLASPRC_JSON_DEV` and `CLASPRC_JSON_LIVE`). Steps 5, 6 and 8 are replaced by the table above and the scaffolded workflow. Paste each account's `~/.clasprc.json` into `CLASPRC_JSON_DEV` and `CLASPRC_JSON_LIVE` under the repository's Settings > Actions > Secrets, logging in separately per account; `gh secret set --env` does not apply on Gitea. Then verify as in step 9; the web app URL appears in the job log, not in a summary.
+Follow the [setup](#setup) steps 1-4 and 7 (store the credentials in `CLASPRC_JSON_DEV` and `CLASPRC_JSON_PROD`). Steps 5, 6 and 8 are replaced by the table above and the scaffolded workflow. Paste each account's `~/.clasprc.json` into `CLASPRC_JSON_DEV` and `CLASPRC_JSON_PROD` under the repository's Settings > Actions > Secrets, logging in separately per account; `gh secret set --env` does not apply on Gitea. Then verify as in step 9; the web app URL appears in the job log, not in a summary.
 
 #### Security
 
-Every workflow run with access to the repository secrets can read `CLASPRC_JSON_LIVE`, not only runs on `main`. Reduce the exposure:
+Every workflow run with access to the repository secrets can read `CLASPRC_JSON_PROD`, not only runs on `main`. Reduce the exposure:
 
 - Protect `develop` and `main`, and require review before merging.
 - Restrict who can push or open workflows in the repository.
-- Use a separate Google account for live, owning only the live scripts.
+- Use a separate Google account for prod, owning only the prod scripts.
 
 See [ADR 0035](docs/adr/0035-gitea-deploy-workflow.md).
 
@@ -1536,24 +1536,26 @@ jobs:
   deploy:
     uses: yorsh-co/gasdev/.github/workflows/gas-deploy.yml@v3.0.0
     with:
-      environment: ${{ github.ref_name == 'main' && 'live' || 'dev' }}
+      environment: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
     secrets: inherit
 ```
 
-`develop` deploys to the `dev` environment and `main` to `live`. `secrets: inherit` is enough: the secret is resolved from the environment the job runs in.
+`develop` deploys to the `dev` environment and `main` to `prod`. `secrets: inherit` is enough: the secret is resolved from the environment the job runs in.
 
 #### CI deployment
 
-For `app` and `webapp` projects, `gasdev init` creates `.github/workflows/deploy.yml` (only when absent) pinned to the installed gasdev version. Pushing `develop` deploys `dev` and pushing `main` deploys `live`, so create both [environments](#environments) before the first push. Personal dev copies of the script keep using the local `.clasp.json` written by `gasdev setup`.
+For `app` and `webapp` projects, `gasdev init` creates `.github/workflows/deploy.yml` (only when absent) pinned to the installed gasdev version. Pushing `develop` deploys `dev` and pushing `main` deploys `prod`, so create both [environments](#environments) before the first push. Personal dev copies of the script keep using the local `.clasp.json` written by `gasdev setup`.
 
 #### Environments
 
 | Environment | Branch    | Secret         | Variables                            |
 | ----------- | --------- | -------------- | ------------------------------------ |
 | `dev`       | `develop` | `CLASPRC_JSON` | `GAS_SCRIPT_ID`, `GAS_DEPLOYMENT_ID` |
-| `live`      | `main`    | `CLASPRC_JSON` | `GAS_SCRIPT_ID`, `GAS_DEPLOYMENT_ID` |
+| `prod`      | `main`    | `CLASPRC_JSON` | `GAS_SCRIPT_ID`, `GAS_DEPLOYMENT_ID` |
 
 The IDs are variables, not secrets, on purpose: GitHub drops job outputs that contain a secret value, and the web app URL contains the deployment ID. They identify the project but grant no access. Both may contain only letters, digits, `_` and `-`.
+
+A `deploy.yml` that still passes `'live'` keeps working with a `live` environment; see [ADR 0038](docs/adr/0038-prod-environment-name.md) to migrate.
 
 #### Project types
 
