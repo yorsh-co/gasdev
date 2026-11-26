@@ -421,10 +421,10 @@ The preset is read from `package.json` and defaults to `gas`. Set it to `node` f
 
 Required lines per preset:
 
-| File              | `gas`                                                                                                       | `node`                                                                                             |
-| ----------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `.gitignore`      | `node_modules/`, `dist/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` | `node_modules/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` |
-| `.prettierignore` | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`                       | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`              |
+| File              | `gas`                                                                                                                      | `node`                                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `.gitignore`      | `node_modules/`, `dist/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env`, `.clasp.json` | `node_modules/`, `.worktrees/`, `.claude/worktrees/`, `.claude/plans/`, `.claude/handoff/`, `.env` |
+| `.prettierignore` | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`                                      | `node_modules`, `.worktrees`, `.claude/worktrees`, `.claude/plans`, `.claude/handoff`              |
 
 Required scripts, exact values, for the `gas` preset. `release` and `build:release` are required for `library` projects (or when `gasdev.type` is unset) only:
 
@@ -1239,7 +1239,7 @@ Commit `.clasp.example.json` and `appsscript.example.json` at the project root. 
 { "rootDir": "dist" }
 ```
 
-Add `.clasp.json` to `.gitignore`: `gasdev` overwrites it from the template plus `GAS_SCRIPT_ID`.
+`gasdev init` and `check --fix` add `.clasp.json` to `.gitignore`; `gasdev` overwrites it from the template plus `GAS_SCRIPT_ID`. If it is already committed, run `git rm --cached .clasp.json`.
 
 #### 3. Provide `check` and `build`
 

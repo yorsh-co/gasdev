@@ -144,18 +144,23 @@ describe.each(['gas', 'node'])('check (%s preset)', (preset) => {
     expect(result.stderr).toContain('1 issue(s) in 1 file(s)');
   });
 
-  it.each(['.claude/worktrees/', '.claude/plans/', '.claude/handoff/', '.env'])(
-    'reports a missing .gitignore line: %s',
-    (entry) => {
-      const dir = make();
-      const file = join(dir, '.gitignore');
-      writeFileSync(file, readFileSync(file, 'utf8').replace(`${entry}\n`, ''));
-      const result = run(dir, ['check']);
-      expect(result.status).toBe(1);
-      expect(result.stderr).toContain(`.gitignore\n  missing line: ${entry}`);
-      expect(result.stderr).toContain('1 issue(s) in 1 file(s)');
-    },
-  );
+  it.each(
+    [
+      '.claude/worktrees/',
+      '.claude/plans/',
+      '.claude/handoff/',
+      '.env',
+      '.clasp.json',
+    ].filter((entry) => entry !== '.clasp.json' || preset === 'gas'),
+  )('reports a missing .gitignore line: %s', (entry) => {
+    const dir = make();
+    const file = join(dir, '.gitignore');
+    writeFileSync(file, readFileSync(file, 'utf8').replace(`${entry}\n`, ''));
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`.gitignore\n  missing line: ${entry}`);
+    expect(result.stderr).toContain('1 issue(s) in 1 file(s)');
+  });
 
   it.each(['.claude/worktrees', '.claude/plans', '.claude/handoff'])(
     'reports a missing .prettierignore line: %s',
@@ -262,6 +267,21 @@ describe.each(['gas', 'node'])('check (%s preset)', (preset) => {
       expect(result.stdout).toContain('.gitignore: added .env');
       expect(read(dir, '.gitignore')).toContain('\n.env\n');
     });
+
+    it.runIf(preset === 'gas')(
+      'appends a missing .clasp.json to .gitignore',
+      () => {
+        const dir = make();
+        writeFileSync(
+          join(dir, '.gitignore'),
+          read(dir, '.gitignore').replace('.clasp.json\n', ''),
+        );
+        const result = run(dir, ['check', '--fix']);
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain('.gitignore: added .clasp.json');
+        expect(read(dir, '.gitignore')).toContain('\n.clasp.json\n');
+      },
+    );
 
     it('keeps extra lines', () => {
       const dir = make();
