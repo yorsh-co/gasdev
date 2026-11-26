@@ -13,5 +13,5 @@ jobs:
   deploy:
     uses: yorsh-co/gasdev/.github/workflows/gas-deploy.yml@v{{GASDEV_VERSION}}
     with:
-      environment: ${{ github.ref_name == 'main' && 'live' || 'dev' }}
+      environment: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
     secrets: inherit

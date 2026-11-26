@@ -144,18 +144,23 @@ describe.each(['gas', 'node'])('check (%s preset)', (preset) => {
     expect(result.stderr).toContain('1 issue(s) in 1 file(s)');
   });
 
-  it.each(['.claude/worktrees/', '.claude/plans/', '.claude/handoff/', '.env'])(
-    'reports a missing .gitignore line: %s',
-    (entry) => {
-      const dir = make();
-      const file = join(dir, '.gitignore');
-      writeFileSync(file, readFileSync(file, 'utf8').replace(`${entry}\n`, ''));
-      const result = run(dir, ['check']);
-      expect(result.status).toBe(1);
-      expect(result.stderr).toContain(`.gitignore\n  missing line: ${entry}`);
-      expect(result.stderr).toContain('1 issue(s) in 1 file(s)');
-    },
-  );
+  it.each(
+    [
+      '.claude/worktrees/',
+      '.claude/plans/',
+      '.claude/handoff/',
+      '.env',
+      '.clasp.json',
+    ].filter((entry) => entry !== '.clasp.json' || preset === 'gas'),
+  )('reports a missing .gitignore line: %s', (entry) => {
+    const dir = make();
+    const file = join(dir, '.gitignore');
+    writeFileSync(file, readFileSync(file, 'utf8').replace(`${entry}\n`, ''));
+    const result = run(dir, ['check']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`.gitignore\n  missing line: ${entry}`);
+    expect(result.stderr).toContain('1 issue(s) in 1 file(s)');
+  });
 
   it.each(['.claude/worktrees', '.claude/plans', '.claude/handoff'])(
     'reports a missing .prettierignore line: %s',
@@ -262,6 +267,21 @@ describe.each(['gas', 'node'])('check (%s preset)', (preset) => {
       expect(result.stdout).toContain('.gitignore: added .env');
       expect(read(dir, '.gitignore')).toContain('\n.env\n');
     });
+
+    it.runIf(preset === 'gas')(
+      'appends a missing .clasp.json to .gitignore',
+      () => {
+        const dir = make();
+        writeFileSync(
+          join(dir, '.gitignore'),
+          read(dir, '.gitignore').replace('.clasp.json\n', ''),
+        );
+        const result = run(dir, ['check', '--fix']);
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain('.gitignore: added .clasp.json');
+        expect(read(dir, '.gitignore')).toContain('\n.clasp.json\n');
+      },
+    );
 
     it('keeps extra lines', () => {
       const dir = make();
@@ -1556,7 +1576,7 @@ describe('gasdev.type', () => {
       const dir = emptyProject({ gasdev: { type } });
       const messages = initProject(dir, { init: true });
       expect(messages).toContain(
-        `${FILE}: created; add the dev and live environments (see "CI deployment" in the README)`,
+        `${FILE}: created; add the dev and prod environments (see "CI deployment" in the README)`,
       );
       const text = readFileSync(join(dir, FILE), 'utf8');
       const template = readFileSync(
@@ -1584,6 +1604,15 @@ describe('gasdev.type', () => {
       expect(readFileSync(join(dir, FILE), 'utf8')).toBe('mine\n');
     });
 
+    it('github template targets prod, not live', () => {
+      const github = readFileSync(
+        join(REPO_ROOT, 'templates/gas/files', FILE),
+        'utf8',
+      );
+      expect(github).toContain("'prod'");
+      expect(github).not.toMatch(/live/i);
+    });
+
     describe('gitea platform', () => {
       const GITEA = '.gitea/workflows/deploy.yml';
       const template = readFileSync(
@@ -1598,7 +1627,7 @@ describe('gasdev.type', () => {
         const dir = emptyProject(gitea(type));
         const messages = initProject(dir, { init: true });
         expect(messages).toContain(
-          `${GITEA}: created; add the dev and live secrets and variables (see "Deploy from Gitea" in the README)`,
+          `${GITEA}: created; add the dev and prod secrets and variables (see "Deploy from Gitea" in the README)`,
         );
         expect(readFileSync(join(dir, GITEA), 'utf8')).toBe(template);
         expect(existsSync(join(dir, FILE))).toBe(false);
@@ -1614,7 +1643,7 @@ describe('gasdev.type', () => {
           'utf8',
         ).replaceAll('{{GASDEV_VERSION}}', version);
         expect(messages).toContain(
-          `${FILE}: created; add the dev and live environments (see "CI deployment" in the README)`,
+          `${FILE}: created; add the dev and prod environments (see "CI deployment" in the README)`,
         );
         expect(readFileSync(join(dir, FILE), 'utf8')).toBe(github);
         expect(existsSync(join(dir, GITEA))).toBe(false);
@@ -1645,7 +1674,7 @@ describe('gasdev.type', () => {
         expect(readFileSync(join(dir, FILE), 'utf8')).toBe('mine\n');
         expect(readFileSync(join(dir, GITEA), 'utf8')).toBe(template);
         expect(messages).toContain(
-          `${GITEA}: created; add the dev and live secrets and variables (see "Deploy from Gitea" in the README)`,
+          `${GITEA}: created; add the dev and prod secrets and variables (see "Deploy from Gitea" in the README)`,
         );
       });
 
@@ -1662,13 +1691,14 @@ describe('gasdev.type', () => {
 
       it('template has per-target secrets, no fallthrough and explicit GITHUB_ACTIONS', () => {
         expect(template).not.toContain('{{GASDEV_VERSION}}');
+        expect(template).not.toMatch(/live/i);
         for (const name of [
           'CLASPRC_JSON_DEV',
-          'CLASPRC_JSON_LIVE',
+          'CLASPRC_JSON_PROD',
           'GAS_SCRIPT_ID_DEV',
-          'GAS_SCRIPT_ID_LIVE',
+          'GAS_SCRIPT_ID_PROD',
           'GAS_DEPLOYMENT_ID_DEV',
-          'GAS_DEPLOYMENT_ID_LIVE',
+          'GAS_DEPLOYMENT_ID_PROD',
         ]) {
           expect(template).toContain(name);
         }
@@ -1683,9 +1713,9 @@ describe('gasdev.type', () => {
             step.includes(`if: github.ref_name == '${branch}'`),
           );
         const dev = stepFor('develop');
-        const live = stepFor('main');
+        const prod = stepFor('main');
         expect(dev).toHaveLength(1);
-        expect(live).toHaveLength(1);
+        expect(prod).toHaveLength(1);
         for (const name of [
           'CLASPRC_JSON_DEV',
           'GAS_SCRIPT_ID_DEV',
@@ -1693,15 +1723,15 @@ describe('gasdev.type', () => {
         ]) {
           expect(dev[0]).toContain(name);
         }
-        expect(dev[0]).not.toContain('_LIVE');
+        expect(dev[0]).not.toContain('_PROD');
         for (const name of [
-          'CLASPRC_JSON_LIVE',
-          'GAS_SCRIPT_ID_LIVE',
-          'GAS_DEPLOYMENT_ID_LIVE',
+          'CLASPRC_JSON_PROD',
+          'GAS_SCRIPT_ID_PROD',
+          'GAS_DEPLOYMENT_ID_PROD',
         ]) {
-          expect(live[0]).toContain(name);
+          expect(prod[0]).toContain(name);
         }
-        expect(live[0]).not.toContain('_DEV');
+        expect(prod[0]).not.toContain('_DEV');
       });
     });
   });

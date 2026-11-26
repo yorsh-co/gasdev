@@ -1,7 +1,7 @@
-# Deploys to Apps Script: develop -> dev project, main -> live project.
-# Secrets: CLASPRC_JSON_DEV, CLASPRC_JSON_LIVE.
-# Variables: GAS_SCRIPT_ID_DEV, GAS_SCRIPT_ID_LIVE, GAS_DEPLOYMENT_ID_DEV,
-# GAS_DEPLOYMENT_ID_LIVE (the deployment IDs may stay empty for push-only projects).
+# Deploys to Apps Script: develop -> dev project, main -> prod project.
+# Secrets: CLASPRC_JSON_DEV, CLASPRC_JSON_PROD.
+# Variables: GAS_SCRIPT_ID_DEV, GAS_SCRIPT_ID_PROD, GAS_DEPLOYMENT_ID_DEV,
+# GAS_DEPLOYMENT_ID_PROD (the deployment IDs may stay empty for push-only projects).
 # See "Deploy from Gitea" in the gasdev README.
 name: Deploy
 
@@ -38,12 +38,12 @@ jobs:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON_DEV }}
           GAS_SCRIPT_ID: ${{ vars.GAS_SCRIPT_ID_DEV }}
           GAS_DEPLOYMENT_ID: ${{ vars.GAS_DEPLOYMENT_ID_DEV }}
-      - name: Deploy to live
-        id: deploy-live
+      - name: Deploy to prod
+        id: deploy-prod
         if: github.ref_name == 'main'
         run: npx --no-install gasdev deploy
         env:
           GITHUB_ACTIONS: 'true'
-          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON_LIVE }}
-          GAS_SCRIPT_ID: ${{ vars.GAS_SCRIPT_ID_LIVE }}
-          GAS_DEPLOYMENT_ID: ${{ vars.GAS_DEPLOYMENT_ID_LIVE }}
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON_PROD }}
+          GAS_SCRIPT_ID: ${{ vars.GAS_SCRIPT_ID_PROD }}
+          GAS_DEPLOYMENT_ID: ${{ vars.GAS_DEPLOYMENT_ID_PROD }}
