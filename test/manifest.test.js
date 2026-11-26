@@ -135,9 +135,23 @@ describe('gasdev manifest', () => {
     expect(result.stderr).toContain(message);
   });
 
-  it('warns on stderr and exits 0 when timeZone is missing', () => {
+  it('exits 1 when rootDir cannot be created', () => {
     const cwd = project({
-      'appsscript.example.json': '{"runtimeVersion":"V8"}',
+      'appsscript.example.json': template,
+      '.clasp.example.json': clasp,
+      dist: 'not a directory',
+    });
+    const result = run(cwd);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('gasdev: cannot write');
+  });
+
+  it.each([
+    ['missing', '{"runtimeVersion":"V8"}'],
+    ['empty', '{"timeZone":""}'],
+  ])('warns on stderr and exits 0 when timeZone is %s', (_name, content) => {
+    const cwd = project({
+      'appsscript.example.json': content,
       '.clasp.example.json': clasp,
     });
     const result = run(cwd);
@@ -145,6 +159,8 @@ describe('gasdev manifest', () => {
     expect(result.stderr).toContain(
       'gasdev manifest: appsscript.example.json has no timeZone; add one so every build uses the same time zone',
     );
+    const text = readFileSync(join(cwd, 'dist', 'appsscript.json'), 'utf8');
+    expect(JSON.parse(text)).toEqual(JSON.parse(content));
   });
 
   it('exits 2 on extra arguments', () => {

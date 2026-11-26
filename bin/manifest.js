@@ -62,11 +62,18 @@ export function runManifest(cwd, { stderr = process.stderr } = {}) {
     }
     throw error;
   }
-  mkdirSync(join(cwd, rootDir), { recursive: true });
-  writeFileSync(
-    join(cwd, rootDir, 'appsscript.json'),
-    JSON.stringify(template, null, 2) + '\n',
-  );
+  try {
+    mkdirSync(join(cwd, rootDir), { recursive: true });
+    writeFileSync(
+      join(cwd, rootDir, 'appsscript.json'),
+      JSON.stringify(template, null, 2) + '\n',
+    );
+  } catch (error) {
+    throw new ManifestError(
+      `cannot write ${rootDir}/appsscript.json: ${/** @type {Error} */ (error).message}`,
+      { cause: error },
+    );
+  }
   if (typeof template.timeZone !== 'string' || template.timeZone === '') {
     stderr.write(
       `gasdev manifest: ${TEMPLATE} has no timeZone; add one so every build uses the same time zone\n`,

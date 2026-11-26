@@ -91,7 +91,8 @@ Commands:
                    network access
   clean [<dir>]    Remove <dir> (default: dist) inside the project; succeeds when
                    absent
-  manifest         Write <rootDir>/appsscript.json from appsscript.example.json (rootDir from .clasp.example.json)
+  manifest         Write <rootDir>/appsscript.json from appsscript.example.json
+                   (rootDir from .clasp.example.json)
 
 Options:
   -h, --help       Show this help
