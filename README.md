@@ -931,6 +931,24 @@ Use `gasdev clean [<dir>]` to remove a build directory. It is the `clean` script
 - It works the same on every platform and needs no other dependency.
 - It refuses the project root and any path outside it, including a path that leaves the project through a symlink (exit 1).
 
+### Manifest
+
+Use `gasdev manifest` to write `<rootDir>/appsscript.json` from `appsscript.example.json`. Deploy requires that file, and no other gasdev command writes it during a build.
+
+- `rootDir` comes from `.clasp.example.json` and is validated as for `gasdev deploy`: absent means `.`, and the path must be relative with no `..`. `.clasp.example.json` is required.
+- The template is written verbatim as 2-space JSON with a trailing newline. The command creates `rootDir` if needed and overwrites any existing manifest, so CI and local builds produce the same output.
+- It does not merge with an existing built manifest. The time zone that `gasdev setup` chooses lives only in the built manifest, so set `timeZone` in `appsscript.example.json`. Without it the command still succeeds and warns on stderr.
+
+Append it to `build`. The rest of the build is project-defined; this is an example:
+
+```json
+{
+  "scripts": {
+    "build": "gasdev clean && tsc -p tsconfig.json && gasdev manifest"
+  }
+}
+```
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Releasing
@@ -1241,9 +1259,11 @@ Commit `.clasp.example.json` and `appsscript.example.json` at the project root. 
 
 Add `.clasp.json` to `.gitignore`: `gasdev` overwrites it from the template plus `GAS_SCRIPT_ID`.
 
+Set `timeZone` in `appsscript.example.json`, because `gasdev manifest` does not keep the zone that `setup` writes.
+
 #### 3. Provide `check` and `build`
 
-Define `npm run check` and `npm run build` scripts, or override them with the [workflow inputs](#workflow-inputs-and-outputs). The build must produce `<rootDir>/appsscript.json`. Web apps declare `oauthScopes` explicitly; see [Scope changes](#scope-changes).
+Define `npm run check` and `npm run build` scripts, or override them with the [workflow inputs](#workflow-inputs-and-outputs). The build must produce `<rootDir>/appsscript.json`. Append `gasdev manifest` to `build` to write it from `appsscript.example.json`; see [Manifest](#manifest). Web apps declare `oauthScopes` explicitly; see [Scope changes](#scope-changes).
 
 #### 4. Create the Apps Script project and web app deployment
 
