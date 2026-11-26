@@ -8,6 +8,10 @@
 
 - Opt-in `gasdev.ci.platform` (`"github"` by default, or `"gitea"`), validated by `check` and `setup`. With `"gitea"`, `init` scaffolds `.gitea/workflows/deploy.yml` for app and webapp projects: a push to `develop` deploys dev and a push to `main` deploys live, using `_DEV`/`_LIVE` suffixed secrets and variables. See the README "Deploy from Gitea" section and ADR 0035
 
+### Changed
+
+- `gasdev check` now requires `.clasp.json` in the `gas` `.gitignore`. Existing gas projects should run `gasdev check --fix`, and `git rm --cached .clasp.json` if the file is already committed; see [ADR 0037](docs/adr/0037-gitignore-clasp-json.md)
+
 ---
 
 ## [3.2.1] - 2026-11-14
